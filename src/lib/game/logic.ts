@@ -46,40 +46,66 @@ export const identifyHand = (cards: Card[]): Hand | null => {
   if (cards.length === 5) {
     // Check Straight (including Big Two special straights: A2345 and 23456)
     const weights = sorted.map((c) => RankOrder[c.rank]);
-    let isStraight = true;
+
+    // Check for standard straight
+    let isStandardStraight = true;
     for (let i = 0; i < 4; i++) {
       if (weights[i + 1] !== weights[i] + 1) {
-        isStraight = false;
+        isStandardStraight = false;
         break;
       }
     }
 
     // Special cases for Big Two:
-    // A-2-3-4-5: weights [0, 1, 2, 11, 12] (3, 4, 5, A, 2)
+    // A-2-3-4-5: ranks [A, 2, 3, 4, 5] (weights [11, 12, 0, 1, 2])
+    const sortedRanks = sorted.map((c) => c.rank);
+    const hasRank = (r: string) => sortedRanks.includes(r);
+
     const isA2345 =
-      weights[0] === 0 &&
-      weights[1] === 1 &&
-      weights[2] === 2 &&
-      weights[3] === 11 &&
-      weights[4] === 12;
-    // 2-3-4-5-6: weights [0, 1, 2, 3, 12] (3, 4, 5, 6, 2)
+      hasRank("A") &&
+      hasRank("2") &&
+      hasRank("3") &&
+      hasRank("4") &&
+      hasRank("5");
     const is23456 =
-      weights[0] === 0 &&
-      weights[1] === 1 &&
-      weights[2] === 2 &&
-      weights[3] === 3 &&
-      weights[4] === 12;
+      hasRank("2") &&
+      hasRank("3") &&
+      hasRank("4") &&
+      hasRank("5") &&
+      hasRank("6");
 
-    if (isStraight || isA2345 || is23456) {
+    if (isStandardStraight || isA2345 || is23456) {
       const isFlush = sorted.every((c) => c.suit === sorted[0].suit);
-      let strength = getCardWeight(sorted[4]);
 
-      if (isA2345) {
-        // A2345 is the smallest straight.
-        // We use the suit of the '5' as the tie-breaker, but base weight is lower than a '7-high' straight (RankOrder 4).
-        const card5 = sorted.find((c) => c.rank === "5")!;
-        strength = -10 + SuitOrder[card5.suit];
+      // Sequence Rank (1 to 10):
+      // 2-3-4-5-6 -> 10
+      // 10-J-Q-K-A -> 9
+      // 9-10-J-Q-K -> 8
+      // ...
+      // 3-4-5-6-7 -> 2
+      // A-2-3-4-5 -> 1
+
+      let sequenceRank = 0;
+      let rankingCardRank = "";
+
+      if (is23456) {
+        sequenceRank = 10;
+        rankingCardRank = "6";
+      } else if (isA2345) {
+        sequenceRank = 1;
+        rankingCardRank = "5";
+      } else {
+        // Standard straights: 3-4-5-6-7 (weights [0..4]) to 10-J-Q-K-A (weights [7..11])
+        // sequenceRank = maxWeight - 2
+        // e.g., 3-4-5-6-7: maxWeight=4 -> 4-2 = 2
+        // e.g., 10-J-Q-K-A: maxWeight=11 -> 11-2 = 9
+        const maxWeight = weights[4];
+        sequenceRank = maxWeight - 2;
+        rankingCardRank = sorted[4].rank;
       }
+
+      const rankingCard = sorted.find((c) => c.rank === rankingCardRank)!;
+      const strength = sequenceRank * 10 + SuitOrder[rankingCard.suit];
 
       if (isFlush) {
         return {
@@ -396,8 +422,32 @@ export const getHandDescription = (hand: Hand): string => {
       return `${cards[0].rank}`;
     case "Pair":
       return `${cards[0].rank} 對子`;
-    case "Straight":
-      return `${sorted.map((c) => c.rank).join("")} 順子`;
+    case "Straight": {
+      const sortedRanks = cards.map((c) => c.rank);
+      const hasRank = (r: string) => sortedRanks.includes(r);
+      const isA2345 =
+        hasRank("A") &&
+        hasRank("2") &&
+        hasRank("3") &&
+        hasRank("4") &&
+        hasRank("5");
+      const is23456 =
+        hasRank("2") &&
+        hasRank("3") &&
+        hasRank("4") &&
+        hasRank("5") &&
+        hasRank("6");
+
+      let displayRanks: string[] = [];
+      if (is23456) {
+        displayRanks = ["2", "3", "4", "5", "6"];
+      } else if (isA2345) {
+        displayRanks = ["A", "2", "3", "4", "5"];
+      } else {
+        displayRanks = sorted.map((c) => c.rank);
+      }
+      return `${displayRanks.join("") || "順子"} 順子`;
+    }
     case "FullHouse": {
       // Find the rank of the triple
       const counts: Record<string, number> = {};
@@ -412,8 +462,32 @@ export const getHandDescription = (hand: Hand): string => {
       const quadRank = Object.keys(counts).find((r) => counts[r] === 4);
       return `${quadRank} 鐵支`;
     }
-    case "StraightFlush":
-      return `${sorted.map((c) => c.rank).join("")} 同花順`;
+    case "StraightFlush": {
+      const sortedRanks = cards.map((c) => c.rank);
+      const hasRank = (r: string) => sortedRanks.includes(r);
+      const isA2345 =
+        hasRank("A") &&
+        hasRank("2") &&
+        hasRank("3") &&
+        hasRank("4") &&
+        hasRank("5");
+      const is23456 =
+        hasRank("2") &&
+        hasRank("3") &&
+        hasRank("4") &&
+        hasRank("5") &&
+        hasRank("6");
+
+      let displayRanks: string[] = [];
+      if (is23456) {
+        displayRanks = ["2", "3", "4", "5", "6"];
+      } else if (isA2345) {
+        displayRanks = ["A", "2", "3", "4", "5"];
+      } else {
+        displayRanks = sorted.map((c) => c.rank);
+      }
+      return `${displayRanks.join("") || "同花順"} 同花順`;
+    }
     case "Dragon":
       return "一條龍";
     default:

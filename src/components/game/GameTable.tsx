@@ -667,8 +667,8 @@ export default function GameTable({
                 {status.isStarted && status.lastPlayedHand && (
                   <motion.div
                     key={status.lastPlayedHand.cards.map((c) => c.id).join(",")}
-                    initial={{ scale: 0.5, opacity: 0, y: 50 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    initial={{ scale: 0.5, opacity: 0, y: 150 }}
+                    animate={{ scale: 1, opacity: 1, y: 100 }}
                     className="flex flex-col items-center gap-4 lg:gap-6"
                   >
                     <div
