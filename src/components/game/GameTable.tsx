@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Card as CardType, GameStatus, Player, Hand } from "@/lib/game/types";
+import {
+  Card as CardType,
+  GameStatus,
+  Player,
+  Hand,
+  HistoryEntry,
+  SuitLabels,
+} from "@/lib/game/types";
 import {
   sortCards,
   identifyHand,
@@ -10,6 +17,8 @@ import {
   getHandDescription,
 } from "@/lib/game/logic";
 import Card from "./Card";
+import TimerProgress from "./TimerProgress";
+import ScrollingName from "./ScrollingName";
 import {
   Trophy,
   Users,
@@ -26,7 +35,12 @@ import {
   Shuffle,
   Play,
   RotateCcw,
+  Move,
+  Check,
   Zap,
+  History,
+  PartyPopper,
+  ArrowDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -54,7 +68,7 @@ interface GameTableProps {
   onSit: (index: number) => void;
   onStandUp: () => void;
   onRandomize: () => void;
-  onAddBot?: () => void;
+  onAddBot?: (index?: number) => void;
   onRemoveBot?: (botId: string) => void;
   onKickPlayer?: (playerId: string) => void;
   onSkipCooldown: () => void;
@@ -69,90 +83,19 @@ interface GameTableProps {
   onTogglePublic: () => void;
   onLeave: () => void;
   onCancelAutoStart: () => void;
+  onCancelCooldown: () => void;
+  onUpdateGameSettings: (
+    mode: "normal" | "score",
+    rounds: number,
+    isDouble?: boolean,
+  ) => void;
+  onResetSeries: () => void;
+  onUpdateSeatMode?: (mode: "free" | "manual" | "elimination") => void;
+  onToggleWantToPlay?: () => void;
+
   isSinglePlayer?: boolean;
+  onPlayerBack?: () => void;
 }
-
-const TimerProgress = ({
-  timeLeft,
-  total = 60,
-  isMyTurn = false,
-}: {
-  timeLeft: number;
-  total?: number;
-  isMyTurn?: boolean;
-}) => {
-  const hue = Math.max(0, (timeLeft / total) * 120);
-  const color = `hsl(${hue}, 80%, 50%)`;
-
-  return (
-    <div className="relative w-16 h-16 lg:w-20 lg:h-20 flex flex-col items-center justify-center">
-      {isMyTurn && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute -top-8 whitespace-nowrap"
-        >
-          <span className="text-[10px] lg:text-xs font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 shadow-lg animate-pulse">
-            輪到你了
-          </span>
-        </motion.div>
-      )}
-      <svg className="w-16 h-16 lg:w-20 lg:h-20 -rotate-90 drop-shadow-[0_0_8px_rgba(0,0,0,0.5)]">
-        <circle
-          cx="50%"
-          cy="50%"
-          r="38%"
-          stroke="currentColor"
-          strokeWidth="8"
-          fill="transparent"
-          className="text-white/5"
-        />
-        <circle
-          cx="50%"
-          cy="50%"
-          r="38%"
-          stroke={color}
-          strokeWidth="8"
-          fill="transparent"
-          strokeDasharray="240"
-          strokeDashoffset={240 * (1 - timeLeft / total)}
-          className="transition-all duration-1000 ease-linear shadow-blue-500"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center justify-center">
-        <span className="text-sm lg:text-base font-black text-white leading-none">
-          {Math.ceil(timeLeft)}
-        </span>
-        <span className="text-[8px] font-black text-white/40 uppercase tracking-tighter">
-          SEC
-        </span>
-      </div>
-    </div>
-  );
-};
-
-// ScrollingName component for long names
-const ScrollingName = ({
-  name,
-  maxLength = 8,
-}: {
-  name: string;
-  maxLength?: number;
-}) => {
-  const shouldScroll = name.length > maxLength;
-
-  if (!shouldScroll) {
-    return <>{name}</>;
-  }
-
-  return (
-    <div className="scroll-name-container">
-      <span className="scroll-name">
-        {name} • {name}
-      </span>
-    </div>
-  );
-};
 
 // Helper function to count actual players (excluding undefined seats)
 const getActualPlayerCount = (players: (Player | undefined)[]): number => {
@@ -166,6 +109,7 @@ export default function GameTable({
   onPass,
   onReady,
   onStart,
+  onPlayerBack,
   onSit,
   onStandUp,
   onRandomize,
@@ -181,9 +125,14 @@ export default function GameTable({
   onToggleSeatSelection,
   onMovePlayer,
   onUpdateAutoStart,
+  onUpdateGameSettings,
   onTogglePublic,
   onLeave,
   onCancelAutoStart,
+  onCancelCooldown,
+  onResetSeries,
+  onUpdateSeatMode,
+  onToggleWantToPlay,
   isSinglePlayer = false,
 }: GameTableProps) {
   const [selectedCards, setSelectedCards] = useState<CardType[]>([]);
@@ -191,6 +140,61 @@ export default function GameTable({
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showRoomId, setShowRoomId] = useState(false);
   const [movingPlayerId, setMovingPlayerId] = useState<string | null>(null);
+  const [isPrePass, setIsPrePass] = useState(false);
+  const [prevScores, setPrevScores] = useState<Record<string, number>>({});
+
+  // Track scores for animations
+  useEffect(() => {
+    if (!status.winnerId) {
+      // While game is running, keep updating "previous" scores to current ones
+      const scores: Record<string, number> = {};
+      status.players.forEach((p) => {
+        if (p) scores[p.id] = p.score || 0;
+      });
+      setPrevScores(scores);
+    }
+  }, [status.isStarted, status.winnerId]); // Only update base scores when game is active or before winner
+
+  const ScoreChange = ({
+    current,
+    prev,
+    player,
+  }: {
+    current: number;
+    prev: number;
+    player: Player;
+  }) => {
+    const diff = current - (prev || 0);
+    if (!status.winnerId || diff === 0) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 0 }}
+        animate={{
+          opacity: [0, 1, 1, 0],
+          y: -100,
+        }}
+        transition={{
+          duration: 2.5,
+          times: [0, 0.2, 0.8, 1],
+          ease: "easeOut",
+        }}
+        className={`absolute left-1/2 -translate-x-1/2 font-black text-2xl lg:text-4xl italic z-[100] ${diff > 0 ? "text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]" : "text-red-400 drop-shadow-[0_0_15px_rgba(248,113,113,0.6)]"}`}
+      >
+        {diff > 0 ? `+${diff}` : diff}
+      </motion.div>
+    );
+  };
+
+  useEffect(() => {
+    if (status.isStarted && !status.winnerId && status.turnStartTime) {
+      // Logic for timeLeft is handled in another useEffect below (line 409), but we might want to consolidate it.
+      // However, to fix the immediate error "redeclare block-scoped variable", I will remove this duplicate block
+      // and rely on the existing one at line 409.
+      // Wait, the block at 228 was added by me. The one at 409 was already there.
+      // So I should remove this block entirely.
+    }
+  }, []); // Dead code block removal
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -198,6 +202,77 @@ export default function GameTable({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  const AvatarDisplay = ({
+    avatar,
+    className,
+    ownerId,
+  }: {
+    avatar?: string;
+    className?: string;
+    ownerId?: string;
+  }) => {
+    const isImage =
+      avatar?.startsWith("data:image") || avatar?.startsWith("http");
+    if (isImage) {
+      return (
+        <img
+          src={avatar}
+          alt="avatar"
+          className={`w-full h-full object-cover rounded-full`}
+        />
+      );
+    }
+    return (
+      <span
+        className={`w-full h-full flex items-center justify-center ${className}`}
+      >
+        {avatar || "😎"}
+      </span>
+    );
+  };
+
+  const handleAutoStartClick = (e: React.MouseEvent) => {
+    // Only host can change
+    if (status.hostId !== myPlayerId) return;
+
+    e.preventDefault(); // Prevent context menu
+
+    const currentDuration = status.autoStartDuration || 5;
+    const isEnabled = status.autoStartEnabled;
+    let nextDuration = currentDuration;
+    let nextEnabled = isEnabled;
+
+    if (e.type === "click") {
+      // Left click
+      if (!isEnabled) {
+        nextEnabled = true;
+        nextDuration = 5;
+      } else {
+        nextDuration += 5;
+        if (nextDuration > 60) {
+          nextEnabled = false;
+          nextDuration = 5;
+        }
+      }
+    } else if (e.type === "contextmenu") {
+      // Right click
+      if (!isEnabled) {
+        nextEnabled = true;
+        nextDuration = 60;
+      } else {
+        nextDuration -= 5;
+        if (nextDuration < 5) {
+          nextEnabled = false;
+          nextDuration = 5;
+        }
+      }
+    }
+
+    onUpdateAutoStart(nextEnabled, nextDuration);
+  };
+
+  const winner = status.players.find((p) => p && p.id === status.winnerId);
 
   const me =
     status.players.find((p) => p && p.id === myPlayerId) ||
@@ -209,6 +284,7 @@ export default function GameTable({
       hand: [],
       isReady: false,
       winCount: 0,
+      gameCount: 0,
     } as Player);
 
   const isLoggedIn = !!myPlayerId;
@@ -257,7 +333,7 @@ export default function GameTable({
       : [];
 
   const toggleCard = (card: CardType) => {
-    if (isSpectator || !isLoggedIn) return;
+    if (isSpectator || !isLoggedIn || status.winnerId) return;
     setSelectedCards((prev) =>
       prev.find((c) => c.id === card.id)
         ? prev.filter((c) => c.id !== card.id)
@@ -308,6 +384,54 @@ export default function GameTable({
     status.currentPlayerIndex,
   ]);
 
+  // Handle Pre-Pass auto action: Triggers when it's our turn and there's a hand to pass
+  // Also handle robust reset when it's our lead
+  useEffect(() => {
+    const playerCount = getActualPlayerCount(status.players);
+    const hasLead =
+      !status.lastPlayedHand ||
+      status.lastPlayerId === myPlayerId ||
+      status.passCount >= playerCount - 1;
+
+    if (isMyTurn) {
+      if (isPrePass) {
+        if (
+          !hasLead &&
+          status.lastPlayedHand &&
+          status.lastPlayerId !== myPlayerId
+        ) {
+          onPass();
+        } else {
+          // If we have the lead, we MUST play, so clear pre-pass immediately
+          setIsPrePass(false);
+        }
+      }
+    } else {
+      // If the board is cleared or everyone else passed while it's NOT our turn,
+      // it means a new lead is coming. Reset pre-pass to be safe.
+      if (hasLead && isPrePass) {
+        setIsPrePass(false);
+      }
+    }
+  }, [
+    isMyTurn,
+    status.lastPlayedHand,
+    status.lastPlayerId,
+    status.passCount,
+    status.players,
+    myPlayerId,
+    isPrePass,
+    onPass,
+  ]);
+
+  useEffect(() => {
+    if (!status.isStarted) {
+      setLocalHandOrder([]);
+      setSelectedCards([]);
+      setIsPrePass(false);
+    }
+  }, [status.isStarted]);
+
   const [cooldownLeft, setCooldownLeft] = useState(10);
   useEffect(() => {
     if (status.isCooldown && status.cooldownStartTime) {
@@ -347,67 +471,6 @@ export default function GameTable({
     );
   };
 
-  const handleAutoStartClick = (e: React.MouseEvent) => {
-    // Only host can change
-    if (status.hostId !== myPlayerId) return;
-
-    e.preventDefault(); // Prevent context menu
-
-    const currentDuration = status.autoStartDuration || 15;
-    const isEnabled = status.autoStartEnabled;
-    let nextDuration = currentDuration;
-    let nextEnabled = isEnabled;
-
-    if (e.type === "click") {
-      // Left click
-      if (!isEnabled) {
-        nextEnabled = true;
-        nextDuration = 5;
-      } else {
-        nextDuration += 5;
-        if (nextDuration > 60) {
-          nextEnabled = false;
-          nextDuration = 15;
-        }
-      }
-    } else if (e.type === "contextmenu") {
-      // Right click
-      if (!isEnabled) {
-        nextEnabled = true;
-        nextDuration = 60;
-      } else {
-        nextDuration -= 5;
-        if (nextDuration < 5) {
-          nextEnabled = false;
-          nextDuration = 15;
-        }
-      }
-    }
-
-    onUpdateAutoStart(nextEnabled, nextDuration);
-  };
-
-  const AvatarDisplay = ({
-    avatar,
-    className,
-  }: {
-    avatar?: string;
-    className?: string;
-  }) => {
-    const isImage =
-      avatar?.startsWith("data:image") || avatar?.startsWith("http");
-    if (isImage) {
-      return (
-        <img
-          src={avatar}
-          alt="avatar"
-          className={`w-full h-full object-cover rounded-full ${className}`}
-        />
-      );
-    }
-    return <span className={className}>{avatar || "😎"}</span>;
-  };
-
   return (
     <div className="relative flex flex-col w-full h-[95vh] overflow-hidden bg-slate-950">
       {/* Container for Table and Sidebar */}
@@ -415,30 +478,74 @@ export default function GameTable({
         {/* Main Game Area */}
         <div className="flex-1 flex flex-col gap-3 min-h-0 relative z-0">
           {/* Top Header */}
-          <div className="shrink-0 flex justify-between items-center bg-slate-900/80 p-3 lg:p-4 rounded-2xl border border-slate-800 backdrop-blur-md">
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col">
-                <span className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em]">
-                  Room ID
-                </span>
-                <div className="flex items-center gap-2 group">
+          <div className="shrink-0 flex justify-between items-center bg-slate-950/60 p-4 rounded-3xl border border-white/5 backdrop-blur-xl shadow-2xl">
+            {/* Left Side - Room Info & Settings */}
+            <div className="flex items-center gap-3 lg:gap-4 overflow-hidden">
+              {/* 1. Room Info */}
+              <div className="flex flex-col gap-0.5 shrink-0 whitespace-nowrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    {isSinglePlayer ? (
+                      <span className="bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20">
+                        SINGLE
+                      </span>
+                    ) : (
+                      <>
+                        ROOM
+                        {status.gameMode === "score" && (
+                          <span
+                            className={`${(status.currentRound || 1) > (status.targetRounds || 5) / 2 ? "bg-red-500/10 text-red-300 border-red-500/20" : "bg-purple-500/10 text-purple-300 border-purple-500/20"} text-[9px] px-1.5 py-0.5 rounded border tracking-normal ml-1 flex items-center gap-1`}
+                          >
+                            R{status.currentRound}/{status.targetRounds}
+                            {status.isDoubleStakeEnabled &&
+                              (() => {
+                                const target = status.targetRounds || 5;
+                                const current = status.currentRound || 1;
+                                let isDouble = false;
+                                if (target === 2 && current === 2)
+                                  isDouble = true;
+                                else if (target === 5 && current >= 4)
+                                  isDouble = true;
+                                else if (target === 7 && current >= 6)
+                                  isDouble = true;
+                                else if (target === 10 && current >= 8)
+                                  isDouble = true;
+                                return (
+                                  isDouble && (
+                                    <span className="text-orange-400 font-black animate-pulse">
+                                      x2
+                                    </span>
+                                  )
+                                );
+                              })()}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
                   {isSinglePlayer ? (
-                    <span className="text-white font-bold text-lg lg:text-xl tracking-wider">
+                    <span className="text-white font-bold text-lg tracking-tight">
                       單人練習
                     </span>
                   ) : isLoggedIn ? (
-                    <div className="flex items-center gap-2">
-                      <span
-                        onClick={shareRoom}
-                        className="text-white font-mono text-lg lg:text-xl tracking-wider cursor-pointer hover:text-blue-400 transition-colors"
-                      >
+                    <div
+                      className="group flex items-center gap-2 cursor-pointer"
+                      onClick={shareRoom}
+                    >
+                      <span className="text-white font-mono text-xl font-bold tracking-widest group-hover:text-blue-400 transition-colors">
                         {showRoomId ? roomId : "******"}
                       </span>
                       <button
-                        onClick={() => setShowRoomId(!showRoomId)}
-                        className="text-slate-500 hover:text-white transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowRoomId(!showRoomId);
+                        }}
+                        className="text-slate-600 group-hover:text-slate-400 transition-colors"
                       >
-                        {showRoomId ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showRoomId ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                   ) : (
@@ -446,83 +553,210 @@ export default function GameTable({
                       type="text"
                       value={roomId}
                       onChange={(e) => setRoomId(e.target.value)}
-                      placeholder="隨機房號"
-                      className="bg-transparent text-white font-mono text-lg outline-none border-b border-white/20 w-28 lg:w-32"
+                      placeholder="Enter Room ID"
+                      className="bg-transparent text-white font-mono text-lg outline-none border-b border-white/10 w-32 focus:border-blue-500 transition-colors placeholder:text-slate-700"
                     />
                   )}
                 </div>
               </div>
-              {isLoggedIn && !isSinglePlayer && (
-                <button
-                  onClick={shareRoom}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${copyFeedback ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}
-                >
-                  {copyFeedback ? (
-                    <>連結已複製! ✨</>
-                  ) : (
-                    <>
-                      <Share2 size={14} /> 分享
-                    </>
+
+              {/* 2. Public/Private Toggle/Display */}
+              {!isSinglePlayer &&
+                (status.isAutoRoom ? (
+                  <div className="h-8 px-3 rounded-lg text-xs font-black flex items-center bg-blue-500/10 text-blue-400/70 border border-blue-500/20 whitespace-nowrap shrink-0">
+                    公開房間
+                  </div>
+                ) : status.hostId === myPlayerId ? (
+                  <button
+                    onClick={onTogglePublic}
+                    disabled={status.isStarted}
+                    className={`h-8 px-3 rounded-lg text-xs font-black transition-all ${status.isPublic ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                  >
+                    {status.isPublic ? "公開" : "私人"}
+                  </button>
+                ) : (
+                  <div
+                    className={`h-8 px-3 rounded-lg text-xs font-black flex items-center border whitespace-nowrap shrink-0 ${status.isPublic ? "bg-blue-500/10 text-blue-400/70 border-blue-500/20" : "bg-slate-800/50 text-slate-500 border-slate-700/50"}`}
+                  >
+                    {status.isPublic ? "公開房間" : "私人房間"}
+                  </div>
+                ))}
+
+              {/* 3. Game Mode Selector/Display */}
+              {status.isAutoRoom ? (
+                <div className="px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[10px] font-black tracking-widest uppercase flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                  一般模式
+                </div>
+              ) : status.hostId === myPlayerId ? (
+                !status.isStarted &&
+                (status.currentRound || 1) === 1 && (
+                  <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5 shadow-inner">
+                    <button
+                      onClick={() =>
+                        onUpdateGameSettings("normal", status.targetRounds || 5)
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all ${status.gameMode === "normal" ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                    >
+                      一般
+                    </button>
+                    <div className="w-px h-3 bg-slate-800 mx-1" />
+                    <button
+                      onClick={() =>
+                        onUpdateGameSettings("score", status.targetRounds || 5)
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all ${status.gameMode === "score" ? "bg-purple-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                    >
+                      積分
+                    </button>
+
+                    {status.gameMode === "score" && (
+                      <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-800">
+                        {[2, 5, 7, 10].map((rounds) => (
+                          <button
+                            key={rounds}
+                            onClick={() =>
+                              onUpdateGameSettings(
+                                "score",
+                                rounds,
+                                status.isDoubleStakeEnabled,
+                              )
+                            }
+                            className={`w-6 h-6 lg:w-7 lg:h-7 rounded flex items-center justify-center text-[10px] font-black transition-all ${status.targetRounds === rounds ? "bg-purple-500 text-white shadow-md scale-110" : "text-slate-500 hover:text-purple-300 hover:bg-slate-800"}`}
+                          >
+                            {rounds}
+                          </button>
+                        ))}
+                        {/* Doubling Toggle */}
+                        <button
+                          onClick={() =>
+                            onUpdateGameSettings(
+                              "score",
+                              status.targetRounds || 5,
+                              !status.isDoubleStakeEnabled,
+                            )
+                          }
+                          className={`ml-2 px-2.5 py-1 rounded text-[10px] font-black border transition-all flex items-center gap-1.5 ${status.isDoubleStakeEnabled ? "bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.2)]" : "bg-slate-800/50 border-white/5 text-slate-500 hover:border-white/10"}`}
+                          title="最後幾局積分 x2"
+                        >
+                          <Zap
+                            size={10}
+                            className={
+                              status.isDoubleStakeEnabled ? "fill-current" : ""
+                            }
+                          />
+                          加倍
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div className="flex items-center gap-2 whitespace-nowrap shrink-0">
+                  <div
+                    className={`px-3 py-1.5 rounded-xl border text-[10px] font-black tracking-widest uppercase flex items-center gap-1.5 ${status.gameMode === "score" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-blue-500/10 border-blue-500/30 text-blue-400"}`}
+                  >
+                    {status.gameMode === "score" ? "積分模式" : "一般模式"}
+                    {status.gameMode === "score" && (
+                      <span className="opacity-60">
+                        ({status.targetRounds}局)
+                      </span>
+                    )}
+                  </div>
+                  {status.isDoubleStakeEnabled && (
+                    <div className="px-2 py-1.5 rounded-xl border border-orange-500/30 bg-orange-500/10 text-orange-400 text-[10px] font-black flex items-center gap-1">
+                      <Zap size={10} className="fill-current" />
+                      加倍
+                    </div>
                   )}
-                </button>
+                </div>
               )}
+
+              {/* 4. Seat Mode Selector/Display */}
+              {!isSinglePlayer &&
+                (status.isAutoRoom ? (
+                  <div className="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] font-black tracking-widest uppercase whitespace-nowrap shrink-0">
+                    自由選位
+                  </div>
+                ) : status.hostId === myPlayerId ? (
+                  !status.isStarted &&
+                  onUpdateSeatMode && (
+                    <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5 shadow-inner">
+                      <button
+                        onClick={() => onUpdateSeatMode("free")}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      >
+                        自由選位
+                      </button>
+                      <div className="w-px h-3 bg-slate-800 mx-1" />
+                      <button
+                        onClick={() => onUpdateSeatMode("manual")}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      >
+                        房主手動
+                      </button>
+                      <div className="w-px h-3 bg-slate-800 mx-1" />
+                      <button
+                        onClick={() => onUpdateSeatMode("elimination")}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"}`}
+                      >
+                        淘汰制
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <div
+                    className={`px-3 py-1.5 rounded-xl border text-[10px] font-black tracking-widest uppercase whitespace-nowrap shrink-0 ${
+                      (status.seatMode || "free") === "free"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        : (status.seatMode || "free") === "manual"
+                          ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                          : "bg-red-500/10 border-red-500/30 text-red-400"
+                    }`}
+                  >
+                    {(status.seatMode || "free") === "free"
+                      ? "自由選位"
+                      : (status.seatMode || "free") === "manual"
+                        ? "房主手動"
+                        : "淘汰制"}
+                  </div>
+                ))}
             </div>
 
-            <div className="flex items-center gap-4 lg:gap-6 text-sm lg:text-base">
-              {status.hostId === myPlayerId && !isSinglePlayer && (
-                <>
-                  {!status.isStarted && (
-                    <button
-                      onClick={handleAutoStartClick}
-                      onContextMenu={handleAutoStartClick}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all select-none ${status.autoStartEnabled ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30" : "bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700"}`}
+            {/* Right Side - Player Count & Actions */}
+            <div className="flex items-center gap-2 lg:gap-3">
+              {/* 5. Player & Spectator Count */}
+              <div className="flex items-center gap-3 px-4 py-2 bg-slate-900/50 rounded-xl border border-white/5">
+                <div className="flex items-center gap-1.5" title="Players">
+                  <Users size={14} className="text-blue-400" />
+                  <span className="text-slate-200 text-xs font-black font-mono">
+                    {getActualPlayerCount(status.players)}
+                    <span className="text-slate-600">/</span>4
+                  </span>
+                </div>
+                {!isSinglePlayer && !status.isQuickMatch && (
+                  <>
+                    <div className="w-px h-3 bg-slate-800" />
+                    <div
+                      className="flex items-center gap-1.5"
+                      title="Spectators"
                     >
-                      {status.autoStartEnabled ? (
-                        <>
-                          <RotateCcw size={12} /> 自動開局:{" "}
-                          {status.autoStartDuration}s
-                        </>
-                      ) : (
-                        "自動開局: 關"
-                      )}
-                    </button>
-                  )}
+                      <Eye size={14} className="text-emerald-400" />
+                      <span className="text-slate-200 text-xs font-black font-mono">
+                        {status.spectators.length}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
 
-                  <button
-                    onClick={onToggleSeatSelection}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${status.allowSeatSelection ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
-                  >
-                    {status.allowSeatSelection
-                      ? "自由選位: 開"
-                      : "自由選位: 關"}
-                  </button>
-                </>
-              )}
-              <div className="flex items-center gap-2">
-                <Users size={18} className="text-blue-400" />
-                <span className="text-white font-bold">
-                  {getActualPlayerCount(status.players)}/4
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Eye size={18} className="text-emerald-400" />
-                <span className="text-white font-bold">
-                  {status.spectators.length}
-                </span>
-              </div>
-              {status.hostId === myPlayerId && !isSinglePlayer && (
-                <button
-                  onClick={onTogglePublic}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${status.isPublic ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
-                >
-                  {status.isPublic ? "房間: 公開" : "房間: 私人"}
-                </button>
-              )}
+              {/* 6. Leave Button */}
               <button
                 onClick={onLeave}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white"
+                className="h-9 w-9 lg:w-auto lg:px-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-red-900/20"
+                title="Leave Room"
               >
-                離開
+                <LogOut size={16} />
+                <span className="hidden lg:inline text-xs font-bold">離開</span>
               </button>
             </div>
           </div>
@@ -531,35 +765,44 @@ export default function GameTable({
           <div className="relative flex-1 bg-emerald-900 rounded-[2.5rem] shadow-inner shadow-emerald-950/60 overflow-hidden border-[6px] lg:border-8 border-emerald-950 flex items-center justify-center min-h-0">
             <div className="absolute inset-0 opacity-[0.05] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/felt.png')] bg-repeat"></div>
 
-            {/* Cooldown Overlay */}
+            {/* Cooldown Overlay - REMOVED FIXED POSITION FROM HERE */}
             <AnimatePresence>
-              {status.isCooldown && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="absolute top-4 lg:top-8 z-40 flex flex-col items-center gap-3"
-                >
-                  <div className="bg-slate-950/80 backdrop-blur-xl border border-white/10 px-4 py-2 lg:px-6 lg:py-3 rounded-2xl flex items-center gap-4 shadow-2xl">
-                    <div className="flex flex-col">
-                      <span className="text-white/50 text-[10px] font-black uppercase tracking-widest">
-                        下次開局時間
-                      </span>
-                      <span className="text-white font-black text-base lg:text-lg italic">
-                        {Math.ceil(cooldownLeft)}s
-                      </span>
+              {status.isCooldown &&
+                false && ( // Disabled here, moved to tray
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="absolute top-[72%] z-40 flex flex-col items-center gap-3"
+                  >
+                    <div className="bg-slate-950/80 backdrop-blur-xl border border-white/10 px-4 py-2 lg:px-6 lg:py-3 rounded-2xl flex items-center gap-4 shadow-2xl">
+                      <div className="flex flex-col">
+                        <span className="text-white/50 text-[10px] font-black uppercase tracking-widest">
+                          下次開局時間
+                        </span>
+                        <span className="text-white font-black text-base lg:text-lg italic">
+                          {Math.ceil(cooldownLeft)}s
+                        </span>
+                      </div>
+                      {status.hostId === myPlayerId && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={onCancelCooldown}
+                            className="bg-slate-700/80 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all text-xs lg:text-sm active:scale-95 border border-white/10"
+                          >
+                            取消
+                          </button>
+                          <button
+                            onClick={onSkipCooldown}
+                            className="bg-yellow-500 hover:bg-yellow-400 text-emerald-950 px-3 py-1.5 rounded-lg font-bold transition-all text-xs lg:text-sm active:scale-95 shadow-lg shadow-yellow-500/10"
+                          >
+                            跳過
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {status.hostId === myPlayerId && (
-                      <button
-                        onClick={onSkipCooldown}
-                        className="bg-yellow-500 hover:bg-yellow-400 text-emerald-950 px-3 py-1.5 rounded-lg font-bold transition-all text-xs lg:text-sm active:scale-95 shadow-lg shadow-yellow-500/10"
-                      >
-                        跳過
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              )}
+                  </motion.div>
+                )}
             </AnimatePresence>
 
             {/* Board Center Area */}
@@ -608,7 +851,7 @@ export default function GameTable({
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.5 }}
-                      className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center rounded-[100px]"
+                      className="absolute top-[65%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] flex flex-col items-center justify-center"
                     >
                       <div className="bg-blue-600 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl shadow-blue-500/40 border-4 border-white/20 mb-4 animate-pulse relative">
                         <span className="text-white text-4xl font-black italic">
@@ -638,74 +881,114 @@ export default function GameTable({
                   )}
               </AnimatePresence>
 
-              {/* Winner Overlay (End of Game) */}
-              <AnimatePresence>
-                {status.winnerId && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute inset-0 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center z-30 rounded-[100px]"
-                  >
-                    <Trophy className="text-yellow-400 w-12 h-12 mb-1 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" />
-                    <h2 className="text-white text-2xl lg:text-3xl font-black italic tracking-tighter mb-0.5">
-                      VICTORY
-                    </h2>
-                    <p className="text-yellow-200 text-sm lg:text-lg font-bold italic truncate max-w-[200px]">
-                      {(() => {
-                        const p = status.players.find(
-                          (pl) => pl?.id === status.winnerId,
-                        );
-                        return p?.name;
-                      })()}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               {/* Last Played Cards */}
               <AnimatePresence mode="wait">
-                {status.isStarted && status.lastPlayedHand && (
-                  <motion.div
-                    key={status.lastPlayedHand.cards.map((c) => c.id).join(",")}
-                    initial={{ scale: 0.5, opacity: 0, y: 150 }}
-                    animate={{ scale: 1, opacity: 1, y: 100 }}
-                    className="flex flex-col items-center gap-4 lg:gap-6"
-                  >
-                    <div
-                      className={`flex ${status.lastPlayedHand.cards.length === 2 ? "gap-2 lg:gap-4" : status.lastPlayedHand.cards.length === 5 ? "-space-x-8 lg:-space-x-12" : "gap-1"}`}
-                    >
-                      {status.lastPlayedHand.cards.map((card, i) => (
-                        <motion.div
-                          key={card.id}
-                          initial={{ scale: 0, y: 50 }}
-                          animate={{ scale: 1, y: 0 }}
-                          transition={{ delay: i * 0.1 }}
-                          className="relative"
-                          style={{ zIndex: i }}
-                        >
-                          <Card
-                            card={card}
-                            disabled
-                            className="shadow-2xl scale-[0.8] lg:scale-110"
-                          />
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    {/* Hand Type Description */}
+                {(status.isStarted || status.winnerId) &&
+                  status.lastPlayedHand && (
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full shadow-2xl"
+                      key={status.lastPlayedHand.cards
+                        .map((c) => c.id)
+                        .join(",")}
+                      initial={{ scale: 0.5, opacity: 0, y: 50 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      className="flex flex-col items-center gap-2 z-30"
                     >
-                      <span className="text-white text-xs lg:text-sm font-black italic tracking-wider whitespace-nowrap">
-                        {getHandDescription(status.lastPlayedHand)}
-                      </span>
+                      {/* Player Info & Hand Type - Simplified */}
+                      <div className="flex items-center gap-2 bg-slate-900/40 px-3 py-1 rounded-full border border-white/5 backdrop-blur-md shadow-lg">
+                        {(() => {
+                          const p = status.players.find(
+                            (pl) => pl?.id === status.lastPlayerId,
+                          );
+                          return p ? (
+                            <div className="flex items-center gap-2">
+                              {/* Restored Avatar */}
+                              <div className="w-5 h-5 rounded-full overflow-hidden border border-white/20">
+                                <AvatarDisplay
+                                  avatar={p.avatar}
+                                  ownerId={p.id}
+                                  className="text-[10px]"
+                                />
+                              </div>
+                              <ScrollingName
+                                name={p.name}
+                                maxLength={6}
+                                className="w-16 lg:w-20 block text-slate-400 font-bold"
+                              />
+                            </div>
+                          ) : null;
+                        })()}
+                        <div className="w-1 h-1 bg-white/20 rounded-full" />
+                        <span className="text-[10px] font-black text-blue-300 uppercase tracking-wider">
+                          {getHandDescription(status.lastPlayedHand)}
+                        </span>
+                        {status.winnerId &&
+                          status.winnerId === status.lastPlayerId && (
+                            <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/20">
+                              <PartyPopper
+                                size={12}
+                                className="text-yellow-400"
+                              />
+                              <span className="text-[12px] font-black text-yellow-400 uppercase italic tracking-tighter animate-bounce">
+                                勝利！
+                              </span>
+                            </div>
+                          )}
+                      </div>
+
+                      {/* Cards Row - Restored to Card Style */}
+                      <div
+                        className={`flex ${status.lastPlayedHand.cards.length === 2 ? "gap-2" : status.lastPlayedHand.cards.length === 5 ? "-space-x-8" : "gap-1"}`}
+                      >
+                        {status.lastPlayedHand.cards.map((card, i) => (
+                          <motion.div
+                            key={card.id}
+                            initial={{ scale: 0, x: 20 }}
+                            animate={{ scale: 1, x: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            className="relative"
+                            style={{ zIndex: i }}
+                          >
+                            <Card
+                              card={card}
+                              disabled
+                              className="shadow-2xl scale-[0.7] lg:scale-90"
+                            />
+                          </motion.div>
+                        ))}
+                      </div>
                     </motion.div>
-                  </motion.div>
-                )}
+                  )}
               </AnimatePresence>
             </div>
+
+            {/* Rejoin Overlay for AFK Player */}
+            <AnimatePresence>
+              {status.isStarted &&
+                !status.winnerId &&
+                status.players.find((p) => p?.id === myPlayerId)?.isBot && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center cursor-pointer"
+                    onClick={() => onPlayerBack?.()}
+                  >
+                    <div className="bg-slate-900/80 p-8 rounded-3xl border border-white/20 shadow-2xl flex flex-col items-center gap-4">
+                      <div className="bg-blue-600 p-4 rounded-full shadow-lg shadow-blue-500/50">
+                        <RotateCcw size={40} className="text-white" />
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <h2 className="text-3xl font-black text-white tracking-tighter italic uppercase">
+                          點擊任意處
+                        </h2>
+                        <span className="text-blue-400 font-bold text-lg">
+                          返回遊戲
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Table Slots */}
             {[0, 1, 2, 3].map((seatIdx) => {
@@ -715,14 +998,15 @@ export default function GameTable({
               // Position 0 is the bottom seat (usually the user)
               // If I am a player, POS 0 is MY absolute seat.
               // If I am a spectator, POS 0 is absolute seat 0.
-              // We only hide pos 0 if we are a player because our hand is rendered separately at the bottom.
-              if (pos === 0 && !isSpectator) return null;
+              // We only hide pos 0 if we are a player because our hand is rendered separately at the bottom during active play.
+              // At game end (winnerId exists), we show the seat so revealed hand can be seen.
+              if (pos === 0 && !isSpectator && !status.winnerId) return null;
 
               const posClasses = [
-                "bottom-8 lg:bottom-12 left-1/2 -translate-x-1/2",
-                "right-8 lg:right-16 top-1/2 -translate-y-1/2 flex-col",
-                "top-2 lg:top-4 left-1/2 -translate-x-1/2 flex-col items-center", // Move even higher
-                "left-8 lg:left-16 top-1/2 -translate-y-1/2 flex-col",
+                "bottom-2 lg:bottom-4 left-1/2 -translate-x-1/2", // Lowered for main player
+                "right-2 lg:right-4 top-1/2 -translate-y-1/2 flex-col items-end", // Closer to right edge, align right
+                "top-2 lg:top-4 left-1/2 -translate-x-1/2 flex-col items-center", // Top center
+                "left-2 lg:left-4 top-1/2 -translate-y-1/2 flex-col items-start", // Closer to left edge, align left
               ][pos];
 
               if (!player) {
@@ -736,7 +1020,7 @@ export default function GameTable({
                 return (
                   <div
                     key={`empty-${seatIdx}`}
-                    className={`absolute ${posClasses} z-10 flex ${pos === 2 ? "flex-row-reverse" : "flex-col"} items-center gap-2`}
+                    className={`absolute ${posClasses} z-10 flex flex-col items-center gap-2`}
                     onDragOver={(e: React.DragEvent) => {
                       if (status.hostId === myPlayerId && !status.isStarted) {
                         e.preventDefault();
@@ -768,26 +1052,22 @@ export default function GameTable({
                           canSit ? "text-blue-400/70" : "text-white/10"
                         }`}
                       >
-                        {canSit ? "Click" : "Empty"}
+                        {canSit ? "坐下" : "Empty"}
                       </span>
                     </div>
 
-                    {canSit && (
-                      <div className={pos === 2 ? "mr-4" : ""}>
+                    {/* Add Bot Button */}
+                    {!status.isStarted &&
+                      status.hostId === myPlayerId &&
+                      !status.isAutoRoom &&
+                      !status.isQuickMatch && (
                         <button
-                          onClick={() => onSit(seatIdx)}
-                          className="bg-white/5 hover:bg-white/10 text-white/30 hover:text-white border border-white/10 p-2 lg:p-3 rounded-2xl transition-all flex flex-col items-center gap-1 group backdrop-blur-sm"
+                          onClick={() => onAddBot?.(seatIdx)}
+                          className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg font-black transition-all text-[9px] flex items-center justify-center gap-1 border border-blue-500/20"
                         >
-                          <PlusCircle
-                            size={20}
-                            className="group-hover:text-blue-400 transition-colors"
-                          />
-                          <span className="text-[9px] font-black tracking-widest">
-                            坐下
-                          </span>
+                          <span className="text-xs leading-none">+</span> 機器人
                         </button>
-                      </div>
-                    )}
+                      )}
                   </div>
                 );
               }
@@ -802,26 +1082,72 @@ export default function GameTable({
               return (
                 <div
                   key={player.id}
-                  className={`absolute ${posClasses} flex flex-col items-center gap-2 z-20`}
-                  draggable={status.hostId === myPlayerId && !status.isStarted}
-                  onDragStart={(e: React.DragEvent) => {
-                    if (status.hostId === myPlayerId && !status.isStarted) {
+                  draggable={
+                    status.hostId === myPlayerId &&
+                    !status.isStarted &&
+                    !status.isAutoRoom
+                  }
+                  onDragStart={(e) => {
+                    if (
+                      status.hostId === myPlayerId &&
+                      !status.isStarted &&
+                      !status.isAutoRoom
+                    ) {
                       e.dataTransfer.setData("playerId", player.id);
                     }
                   }}
                   onDragOver={(e: React.DragEvent) => {
-                    if (status.hostId === myPlayerId && !status.isStarted) {
+                    if (
+                      status.hostId === myPlayerId &&
+                      !status.isStarted &&
+                      !status.isAutoRoom
+                    ) {
                       e.preventDefault();
                     }
                   }}
                   onDrop={(e: React.DragEvent) => {
-                    if (status.hostId === myPlayerId && !status.isStarted) {
+                    if (
+                      status.hostId === myPlayerId &&
+                      !status.isStarted &&
+                      !status.isAutoRoom
+                    ) {
                       e.preventDefault();
                       const pid = e.dataTransfer.getData("playerId");
-                      if (pid) onMovePlayer(pid, seatIdx);
+                      if (pid && pid !== player.id) onMovePlayer(pid, seatIdx);
                     }
                   }}
+                  className={`absolute ${posClasses} flex flex-col items-center gap-2 z-20 transition-all ${player.isOffline || player.isBot ? "opacity-60 saturate-50" : ""} ${status.hostId === myPlayerId && !status.isStarted && !status.isAutoRoom ? "cursor-grab active:cursor-grabbing" : ""}`}
                 >
+                  {/* Offline Warning */}
+                  {player.isOffline && !player.isBot && player.offlineTime && (
+                    <div className="absolute -top-12 whitespace-nowrap z-50">
+                      <div className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-xl animate-pulse flex flex-col items-center leading-none">
+                        <span>已斷線</span>
+                        <span className="mt-1">
+                          {Math.max(
+                            0,
+                            60 -
+                              Math.floor(
+                                (Date.now() - player.offlineTime) / 1000,
+                              ),
+                          )}
+                          s
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {/* AFK Bot Mask - Grey Overlay (For Pos 0, 1, 3 Only) */}
+                  {/* Only show for non-native bots (converted humans) */}
+                  {player.isBot &&
+                    !isSinglePlayer &&
+                    !player.id.startsWith("cpu") && (
+                      <div className="absolute inset-0 -m-2 z-40 bg-slate-900/80 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center border-2 border-slate-700/50">
+                        <Zap size={20} className="text-slate-500 mb-1" />
+                        <span className="text-slate-400 font-black text-[9px] uppercase tracking-widest bg-slate-800 px-1.5 py-0.5 rounded">
+                          電腦代管
+                        </span>
+                      </div>
+                    )}
                   {/* Timer next to player if it's their turn */}
                   {isTurn && status.isStarted && !status.winnerId && (
                     <div
@@ -833,245 +1159,194 @@ export default function GameTable({
                       />
                     </div>
                   )}
-
-                  {/* For pos 2 (opponent), show info on the side so hand remains centered */}
-                  {pos === 2 ? (
-                    <div className="relative flex items-center justify-center">
-                      <div
-                        className={`absolute right-[calc(100%+7rem)] top-0 group p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[80px] lg:min-w-[100px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
+                  <AnimatePresence>
+                    {revealAll && player.hand.length > 0 ? (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={`flex -space-x-10 mb-2 scale-[0.4] lg:scale-[0.55] ${pos === 1 ? "origin-right" : pos === 3 ? "origin-left" : "origin-center"}`}
                       >
-                        <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                          <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs max-w-[60px] lg:max-w-[80px] overflow-hidden truncate">
-                            {status.hostId === player.id && (
-                              <Crown
-                                size={10}
-                                className="text-yellow-400 shrink-0"
-                              />
-                            )}
-                            <AvatarDisplay
-                              avatar={player.avatar}
-                              className="text-base"
-                            />
-                            {player.name}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
-                            🂠 {player.hand.length}
-                          </div>
-                          <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-                            <span className="text-yellow-400 font-bold">★</span>{" "}
-                            {player.winCount || 0}
-                          </div>
-                        </div>
-                      </div>
-
-                      <AnimatePresence>
-                        {revealAll && player.hand.length > 0 ? (
+                        {sortCards(player.hand).map((c, i) => (
                           <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex -space-x-10 scale-[0.4] lg:scale-[0.55]"
+                            key={c.id}
+                            initial={{
+                              x: pos === 1 ? -100 : pos === 3 ? 100 : 0,
+                              y: pos === 2 ? 100 : -100,
+                              scale: 0,
+                              opacity: 0,
+                            }}
+                            animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+                            transition={{ delay: i * 0.05 + 0.5 }}
+                            style={{ zIndex: i }}
+                            className="relative"
                           >
-                            {sortCards(player.hand).map((c, i) => (
-                              <motion.div
-                                key={c.id}
-                                initial={{
-                                  x: -100,
-                                  y: 100,
-                                  scale: 0,
-                                  opacity: 0,
-                                }}
-                                animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-                                transition={{ delay: i * 0.05 + 0.5 }}
-                                style={{ zIndex: i }}
-                                className="relative"
-                              >
-                                <Card card={c} disabled />
-                              </motion.div>
-                            ))}
+                            <Card card={c} disabled />
                           </motion.div>
-                        ) : (
-                          player.hand.length > 0 &&
-                          status.isStarted && (
-                            <div className="relative w-20 h-28">
-                              {player.hand.map((_, i) => (
-                                <CardBack
-                                  key={i}
-                                  index={i}
-                                  total={player.hand.length}
-                                />
-                              ))}
-                            </div>
-                          )
+                        ))}
+                      </motion.div>
+                    ) : (
+                      player.hand.length > 0 &&
+                      (status.isStarted || status.winnerId) && (
+                        <div className="relative w-20 h-28 mb-4">
+                          {player.hand.map((_, i) => (
+                            <CardBack
+                              key={i}
+                              index={i}
+                              total={player.hand.length}
+                            />
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </AnimatePresence>
+                  <div
+                    className={`group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[80px] lg:min-w-[100px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                      <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs max-w-[60px] lg:max-w-[80px] overflow-hidden">
+                        {status.hostId === player.id && !status.isAutoRoom && (
+                          <Crown
+                            size={10}
+                            className="text-yellow-400 shrink-0"
+                          />
                         )}
-                      </AnimatePresence>
+                        <div className="w-5 h-5 lg:w-6 lg:h-6 rounded-full overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center border border-white/10">
+                          <AvatarDisplay
+                            avatar={player.avatar}
+                            ownerId={player.id}
+                            className="text-[10px] lg:text-xs"
+                          />
+                        </div>
+                        <ScrollingName name={player.name} maxLength={6} />
+                      </div>
+                      {status.hostId === myPlayerId &&
+                        player.id !== myPlayerId &&
+                        !status.isStarted &&
+                        !status.isAutoRoom && (
+                          <button
+                            onClick={() => onKickPlayer?.(player.id)}
+                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition-all"
+                          >
+                            <UserX size={10} />
+                          </button>
+                        )}
                     </div>
-                  ) : (
-                    // For other positions, keep original layout
-                    <>
-                      <AnimatePresence>
-                        {revealAll && player.hand.length > 0 ? (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex -space-x-10 mb-2 scale-[0.4] lg:scale-[0.55]"
-                          >
-                            {sortCards(player.hand).map((c, i) => (
-                              <motion.div
-                                key={c.id}
-                                initial={{
-                                  x: pos === 1 ? -100 : pos === 3 ? 100 : 0,
-                                  y: pos === 2 ? 100 : -100,
-                                  scale: 0,
-                                  opacity: 0,
-                                }}
-                                animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-                                transition={{ delay: i * 0.05 + 0.5 }}
-                                style={{ zIndex: i }}
-                                className="relative"
-                              >
-                                <Card card={c} disabled />
-                              </motion.div>
-                            ))}
-                          </motion.div>
-                        ) : (
-                          player.hand.length > 0 &&
-                          status.isStarted && (
-                            <div className="relative w-20 h-28 mb-4">
-                              {player.hand.map((_, i) => (
-                                <CardBack
-                                  key={i}
-                                  index={i}
-                                  total={player.hand.length}
-                                />
-                              ))}
-                            </div>
-                          )
-                        )}
-                      </AnimatePresence>
-                      <div
-                        className={`group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[80px] lg:min-w-[100px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
-                      >
-                        <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                          <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs max-w-[60px] lg:max-w-[80px] overflow-hidden truncate">
-                            {status.hostId === player.id && (
-                              <Crown
-                                size={10}
-                                className="text-yellow-400 shrink-0"
-                              />
-                            )}
-                            <AvatarDisplay
-                              avatar={player.avatar}
-                              className="text-base"
-                            />
-                            {player.name}
-                          </div>
-                          {status.hostId === myPlayerId &&
-                            player.id !== myPlayerId &&
-                            !status.isStarted && (
-                              <button
-                                onClick={() => onKickPlayer?.(player.id)}
-                                className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition-all"
-                              >
-                                <UserX size={10} />
-                              </button>
-                            )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
-                            🂠 {player.hand.length}
-                          </div>
-                          <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-                            <span className="text-yellow-400 font-bold">★</span>{" "}
-                            {player.winCount || 0}
-                          </div>
-                        </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
+                        🂠 {player.hand.length}
                       </div>
-                    </>
-                  )}
+                      {status.gameMode === "score" ? (
+                        <div className="text-[9px] bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 flex items-center gap-1">
+                          <span className="text-yellow-400 font-bold">PTS</span>{" "}
+                          <span className="text-white font-black">
+                            {player.score || 0}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                          <span className="text-yellow-400 font-bold">★</span>{" "}
+                          {player.winCount || 0}
+                          <span className="text-white/20 mx-0.5">/</span>
+                          <span className="text-white/40">
+                            {player.gameCount || 0}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {!status.isStarted && (
+                      <div
+                        className={`text-[8px] font-black tracking-widest mt-1 text-center ${player.isReady ? "text-emerald-400" : "text-slate-500"}`}
+                      >
+                        ● {player.isReady ? "已準備" : "未準備"}
+                      </div>
+                    )}
+                    <ScoreChange
+                      current={player.score || 0}
+                      prev={prevScores[player.id]}
+                      player={player}
+                    />
+                  </div>{" "}
                 </div>
               );
             })}
           </div>
 
-          {/* My Hand Section */}
-          <div className="shrink-0 flex items-end gap-4 min-h-0">
-            <div className="w-48 lg:w-60 pb-8 flex flex-col justify-end">
-              <AnimatePresence>
-                {isLoggedIn && !isSpectator && (
-                  <div
-                    className="relative"
-                    draggable={
-                      status.hostId === myPlayerId && !status.isStarted
-                    }
-                    onDragStart={(e: React.DragEvent) => {
-                      if (status.hostId === myPlayerId && !status.isStarted) {
-                        e.dataTransfer.setData("playerId", me.id);
-                      }
-                    }}
-                  >
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className={`p-3 rounded-[1.5rem] border-2 transition-all relative ${status.players[status.currentPlayerIndex]?.id === myPlayerId ? "bg-blue-600/20 border-blue-400 shadow-lg shadow-blue-500/30 scale-105" : "bg-slate-900 border-slate-800 text-white"}`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 font-black text-sm lg:text-base truncate">
-                          {status.hostId === myPlayerId && (
-                            <Crown
-                              size={16}
-                              className="text-yellow-400 shrink-0"
-                            />
-                          )}
-                          <AvatarDisplay
-                            avatar={me.avatar}
-                            className="text-2xl mr-1"
-                          />
-                          {me.name}
-                        </div>
-                        {/* Timer for Me */}
-                        {isMyTurn && !status.winnerId && (
-                          <div className="scale-75 origin-right">
-                            <TimerProgress
-                              timeLeft={timeLeft}
-                              isMyTurn={true}
-                            />
+          {/* My Hand Section - centered at the bottom of the main area */}
+          <div className="shrink-0 relative flex flex-col items-center justify-end h-48 lg:h-60 pb-0">
+            <AnimatePresence mode="wait">
+              {isLoggedIn &&
+              !isSpectator &&
+              (status.isStarted || status.winnerId) ? (
+                <div className="flex flex-col items-center gap-2 w-full">
+                  {/* Cooldown UI in Tray Area */}
+                  <AnimatePresence>
+                    {status.isCooldown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="mb-2"
+                      >
+                        <div className="bg-slate-900 border border-white/10 px-4 py-2 lg:px-6 lg:py-2 rounded-xl flex items-center gap-4 shadow-xl">
+                          <div className="flex flex-col">
+                            <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">
+                              下次開局時間
+                            </span>
+                            <span className="text-white font-black text-sm lg:text-base italic">
+                              {Math.ceil(cooldownLeft)}s
+                            </span>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs font-black opacity-60 flex items-center gap-2">
-                          <Users size={14} /> 🂠 {me.hand.length}
+                          {status.hostId === myPlayerId && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={onCancelCooldown}
+                                className="bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1 rounded-lg font-bold transition-all text-[10px] lg:text-xs active:scale-95 border border-white/5"
+                              >
+                                取消
+                              </button>
+                              <button
+                                onClick={onSkipCooldown}
+                                className="bg-yellow-500 hover:bg-yellow-400 text-emerald-950 px-2.5 py-1 rounded-lg font-bold transition-all text-[10px] lg:text-xs active:scale-95 shadow-lg shadow-yellow-500/10"
+                              >
+                                跳過
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs bg-white/5 px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
-                          <Trophy size={14} className="text-yellow-400" />{" "}
-                          {me.winCount || 0}
-                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Your Turn Indicator */}
+                  {isMyTurn && !status.winnerId && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                      }}
+                      className="absolute bottom-56 lg:bottom-72 z-50 flex items-center gap-4 pointer-events-none"
+                    >
+                      <div className="bg-blue-600 text-white px-6 py-1.5 rounded-full text-xs font-black uppercase tracking-[0.3em] shadow-xl shadow-blue-500/40 border border-blue-400/50 flex items-center gap-2">
+                        <Zap
+                          size={14}
+                          fill="currentColor"
+                          className="animate-pulse"
+                        />
+                        輪到你了！
                       </div>
-                      {!status.isStarted && (
-                        <div
-                          className={`text-[10px] font-black tracking-widest ${me.isReady ? "text-emerald-400" : "text-slate-500"}`}
-                        >
-                          ● {me.isReady ? "已準備" : "未準備"}
+                      {(status.lastPlayerId === myPlayerId ||
+                        !status.lastPlayedHand) && (
+                        <div className="bg-emerald-500 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-500/40 border border-emerald-400/50 flex items-center gap-2 animate-bounce">
+                          <Crown size={14} fill="currentColor" />
+                          你擁有牌權
                         </div>
                       )}
-                      <button
-                        onClick={onStandUp}
-                        className="absolute -top-2 -right-2 bg-slate-800 hover:bg-slate-700 p-2 rounded-xl border border-slate-700 shadow-xl transition-all"
-                      >
-                        <LogOut size={14} className="text-orange-400" />
-                      </button>
+                      <TimerProgress timeLeft={timeLeft} total={60} />
                     </motion.div>
-                  </div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="flex-1 min-h-[180px] lg:min-h-[220px] relative flex flex-col items-center justify-end pb-4">
-              <AnimatePresence mode="wait">
-                {isLoggedIn && !isSpectator && status.isStarted ? (
-                  <div className="flex flex-col items-center gap-4 w-full">
+                  )}
+                  {!status.winnerId && (
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
@@ -1081,12 +1356,12 @@ export default function GameTable({
                         items={localHandOrder}
                         strategy={horizontalListSortingStrategy}
                       >
-                        <div className="flex -space-x-8 sm:-space-x-12 px-6 h-36 lg:h-44 items-end justify-center min-w-full">
+                        <div className="flex -space-x-8 sm:-space-x-12 px-6 h-40 lg:h-52 items-end justify-center min-w-full overflow-visible">
                           {sortedMeHand.map((card, i) => (
                             <motion.div
                               key={card.id}
                               initial={
-                                !status.isStarted
+                                !status.isStarted && !status.winnerId
                                   ? { opacity: 0 }
                                   : { y: -200, scale: 0, opacity: 0 }
                               }
@@ -1105,73 +1380,133 @@ export default function GameTable({
                                   !!selectedCards.find((c) => c.id === card.id)
                                 }
                                 onClick={() => toggleCard(card)}
-                                className="scale-[0.85] lg:scale-100 origin-bottom"
+                                className={`scale-[0.85] lg:scale-100 origin-bottom transition-opacity ${status.winnerId ? "opacity-50 grayscale-[0.2]" : ""}`}
                               />
                             </motion.div>
                           ))}
                         </div>
                       </SortableContext>
                     </DndContext>
-                    <div className="flex gap-4">
-                      <button
-                        disabled={!canPlay}
-                        onClick={handlePlay}
-                        className={`px-10 py-2.5 rounded-full font-black text-base flex items-center gap-2 transition-all shadow-xl active:scale-95 ${canPlay ? "bg-blue-600 text-white hover:bg-blue-500 scale-105 shadow-blue-500/20" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
-                      >
-                        <Send size={18} /> 出牌
-                      </button>
-                      <button
-                        disabled={
-                          !isMyTurn ||
-                          status.lastPlayerId === myPlayerId ||
-                          !status.lastPlayedHand
-                        }
-                        onClick={onPass}
-                        className={`px-10 py-2.5 rounded-full font-black text-base flex items-center gap-2 transition-all shadow-xl active:scale-95 ${isMyTurn && status.lastPlayerId !== myPlayerId && status.lastPlayedHand ? "bg-orange-600 text-white hover:bg-orange-500 scale-105 shadow-orange-500/20" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
-                      >
-                        <SkipForward size={18} /> 過牌
-                      </button>
-                    </div>
-                  </div>
-                ) : isLoggedIn && !isSpectator && !status.isStarted ? (
-                  <div className="h-44 mb-2 flex items-center justify-center gap-4">
-                    {/* Lobby Controls in hand area */}
-                    {status.hostId === myPlayerId && (
-                      <div className="flex flex-col gap-2">
+                  )}
+                  <div className="flex flex-col items-center gap-3 w-full">
+                    {!status.winnerId ? (
+                      <>
                         <button
-                          onClick={onStart}
-                          disabled={
-                            getActualPlayerCount(status.players) < 4 ||
-                            !status.players.every((p) => !p || p.isReady)
-                          }
-                          className={`px-8 py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 && status.players.every((p) => !p || p?.isReady) ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                          disabled={!canPlay}
+                          onClick={handlePlay}
+                          className={`w-full max-w-[280px] py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 transition-all shadow-xl active:scale-95 ${canPlay ? "bg-blue-600 text-white hover:bg-blue-500 scale-105 shadow-blue-500/30" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
                         >
-                          <Play size={18} /> 開始遊戲
+                          <Send size={24} /> 出牌
                         </button>
+                        {/* Pass / Pre-Pass Toggle */}
+                        {isMyTurn ? (
+                          <button
+                            disabled={
+                              status.lastPlayerId === myPlayerId ||
+                              !status.lastPlayedHand
+                            }
+                            onClick={onPass}
+                            className={`px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 transition-all shadow-lg active:scale-95 ${status.lastPlayerId !== myPlayerId && status.lastPlayedHand ? "bg-orange-600/20 text-orange-400 hover:bg-orange-600 hover:text-white border border-orange-500/30 shadow-orange-500/10" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                          >
+                            <SkipForward size={14} /> 過牌
+                          </button>
+                        ) : status.isStarted &&
+                          !status.winnerId &&
+                          !isSpectator ? (
+                          <button
+                            onClick={() => setIsPrePass(!isPrePass)}
+                            className={`px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 transition-all shadow-lg active:scale-95 border ${isPrePass ? "bg-orange-500 text-white border-orange-400 animate-pulse" : "bg-slate-800/80 text-orange-400/60 border-orange-500/20 hover:border-orange-500/40"}`}
+                          >
+                            <SkipForward size={14} />{" "}
+                            {isPrePass ? "已預約過牌" : "預約過牌"}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      // Game Over / Lobby Controls
+                      <div className="flex items-center justify-center gap-4 py-2">
+                        {status.hostId === myPlayerId && (
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={onStart}
+                              disabled={
+                                getActualPlayerCount(status.players) < 4
+                              }
+                              className={`px-8 py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                            >
+                              <Play size={18} /> 開始遊戲
+                            </button>
+                            {!isSinglePlayer && (
+                              <div className="flex gap-2">
+                                {((status.seatMode || "free") === "manual" ||
+                                  (status.seatMode || "free") === "free") && (
+                                  <button
+                                    onClick={onRandomize}
+                                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
+                                  >
+                                    <Shuffle size={12} /> 隨機座位
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {!isSinglePlayer && me.role === "player" && (
+                          <button
+                            onClick={onReady}
+                            className={`px-8 py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center gap-2 group relative`}
+                          >
+                            {me.isReady ? (
+                              <>
+                                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />{" "}
+                                已準備
+                              </>
+                            ) : (
+                              <>
+                                <Zap size={18} fill="currentColor" /> 準備好了
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : isLoggedIn &&
+                !isSpectator &&
+                !status.isStarted &&
+                !status.isCooldown ? (
+                <div className="h-44 mb-2 flex items-center justify-center gap-4">
+                  {/* Lobby Controls in hand area (Initial state) */}
+                  {status.hostId === myPlayerId && (
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={onStart}
+                        disabled={getActualPlayerCount(status.players) < 4}
+                        className={`px-8 py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                      >
+                        <Play size={18} /> 開始遊戲
+                      </button>
 
-                        {!isSinglePlayer && (
-                          <div className="flex gap-2">
+                      {!isSinglePlayer && (
+                        <div className="flex gap-2">
+                          {((status.seatMode || "free") === "manual" ||
+                            (status.seatMode || "free") === "free") && (
                             <button
                               onClick={onRandomize}
                               className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
                             >
                               <Shuffle size={12} /> 隨機座位
                             </button>
-                            {getActualPlayerCount(status.players) < 4 && (
-                              <button
-                                onClick={onAddBot}
-                                className="flex-1 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-blue-500/20"
-                              >
-                                <span className="text-sm leading-none">+</span>{" "}
-                                機器人
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                    {!isSinglePlayer && me.role === "player" && (
+                  {!isSinglePlayer &&
+                    me.role === "player" &&
+                    !status.isCooldown && (
                       <button
                         onClick={onReady}
                         className={`px-8 py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center gap-2 group relative`}
@@ -1179,7 +1514,7 @@ export default function GameTable({
                         {me.isReady ? (
                           <>
                             <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />{" "}
-                            READY
+                            已準備
                             <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-950 text-white text-xs px-3 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                               取消準備
                             </span>
@@ -1191,103 +1526,436 @@ export default function GameTable({
                         )}
                       </button>
                     )}
+                </div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </div>
+        {/* My Info Tag Relocated inside the board area - bottom left corner of emerald zone */}
+        {isLoggedIn && !isSpectator && !status.winnerId && (
+          <div className="absolute left-[8%] bottom-[6%] z-50 pointer-events-none">
+            <div className="group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[100px] lg:min-w-[120px] bg-slate-900 border-blue-500/30 text-white backdrop-blur-md shadow-2xl pointer-events-auto">
+              {me.isBot && (
+                <div className="absolute -top-3 -right-3 z-50 bg-blue-600 text-white px-2 py-1 rounded-lg text-[8px] font-black italic tracking-tighter flex items-center gap-1 shadow-lg shadow-blue-500/50 border border-blue-400 animate-pulse">
+                  <Zap size={8} fill="currentColor" /> 電腦託管
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <div className="flex items-center gap-1.5 font-black text-[10px] lg:text-xs overflow-hidden">
+                  <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-full overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center border border-white/10 relative">
+                    <AvatarDisplay
+                      avatar={me.avatar}
+                      ownerId={me.id}
+                      className="text-[12px] lg:text-sm"
+                    />
+                    {status.hostId === me.id && (
+                      <div className="absolute -top-0.5 -right-0.5 bg-yellow-400 text-slate-950 rounded-full p-0.5 border border-slate-900 shadow-sm">
+                        <Crown size={6} strokeWidth={4} />
+                      </div>
+                    )}
                   </div>
-                ) : null}
+                  <ScrollingName name={me.name} maxLength={8} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
+                  🂠 {me.hand?.length || 0}
+                </div>
+                {status.gameMode === "score" ? (
+                  <div className="text-[9px] bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 flex items-center gap-1">
+                    <span className="text-yellow-400 font-bold">PTS</span>
+                    <span className="text-white font-black">
+                      {me.score || 0}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                    <span className="text-yellow-400 font-bold">★</span>
+                    {me.winCount || 0}
+                    <span className="text-white/20 mx-0.5">/</span>
+                    <span className="text-white/40">{me.gameCount || 0}</span>
+                  </div>
+                )}
+              </div>
+              {!status.isStarted && (
+                <div
+                  className={`text-[8px] font-black tracking-widest mt-1 text-center ${me.isReady ? "text-emerald-400" : "text-slate-500"}`}
+                >
+                  ● {me.isReady ? "已準備" : "未準備"}
+                </div>
+              )}
+              {/* Stand Up Button in Info Card - Only show when game not started */}
+              {!status.isStarted && (
+                <button
+                  onClick={onStandUp}
+                  className="absolute -top-2 -right-2 bg-slate-800 hover:bg-slate-700 p-1 rounded-lg border border-slate-700 shadow-xl transition-all opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100"
+                >
+                  <LogOut size={10} className="text-orange-400" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Right Sidebar */}
+        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 min-h-0">
+          {/* History Panel - Top half or separate */}
+          <div className="flex-[3] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-5 flex flex-col shadow-2xl min-h-0">
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 className="text-white text-base font-black italic tracking-tight flex items-center gap-2">
+                <History size={18} className="text-blue-400" /> 出牌紀錄
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto pr-1 space-y-2 scrollbar-none">
+              <AnimatePresence initial={false}>
+                {status.history?.map((entry) => (
+                  <div key={entry.id} className="flex flex-col gap-2">
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 bg-slate-950/60 border border-slate-800/50 rounded-2xl flex flex-col gap-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-400 truncate max-w-[100px]">
+                          {entry.playerName}
+                        </span>
+                        <span className="text-[8px] font-bold text-slate-600">
+                          {new Date(entry.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      {entry.action === "play" && entry.hand ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-1 flex-wrap">
+                            {entry.hand.cards.map((c, i) => {
+                              const isRed =
+                                c.suit === "Hearts" || c.suit === "Diamonds";
+                              return (
+                                <div
+                                  key={i}
+                                  className="w-5 h-7 lg:w-6 lg:h-8 bg-white rounded-[2px] border border-slate-300 flex flex-col items-center justify-center relative shadow-sm"
+                                >
+                                  <span
+                                    className={`text-[8px] lg:text-[10px] font-black leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
+                                  >
+                                    {c.rank}
+                                  </span>
+                                  <span
+                                    className={`text-[6px] lg:text-[8px] leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
+                                  >
+                                    {SuitLabels[c.suit]}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-0.5 rounded-lg w-fit flex items-center gap-2">
+                          <SkipForward size={10} /> 過牌
+                        </div>
+                      )}
+                    </motion.div>
+                    {entry.isNewRound && (
+                      <div className="py-2 flex items-center gap-3 px-2">
+                        <div className="flex-1 h-px bg-slate-800" />
+                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest whitespace-nowrap italic">
+                          新回合
+                        </span>
+                        <div className="flex-1 h-px bg-slate-800" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(!status.history || status.history.length === 0) && (
+                  <div className="flex-1 flex flex-center h-full items-center justify-center opacity-20 py-10">
+                    <History size={32} />
+                  </div>
+                )}
               </AnimatePresence>
             </div>
           </div>
-        </div>
 
-        {/* Right Sidebar */}
-        <div className="w-full lg:w-56 shrink-0 flex flex-col gap-4">
-          <div
-            className="flex-1 bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-5 flex flex-col shadow-2xl min-h-0"
-            onDragOver={(e: React.DragEvent) => {
-              if (status.hostId === myPlayerId && !status.isStarted) {
-                e.preventDefault();
-              }
-            }}
-            onDrop={(e: React.DragEvent) => {
-              if (status.hostId === myPlayerId && !status.isStarted) {
-                e.preventDefault();
-                const pid = e.dataTransfer.getData("playerId");
-                const player = status.players.find((p) => p?.id === pid);
-                // Prevent bots from being moved to spectator area
-                if (pid && player && !player.isBot) {
-                  onMovePlayer(pid, "spectator");
+          {/* Spectator List - Bottom half */}
+          {!status.isAutoRoom && (
+            <div
+              className="flex-[2] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-5 flex flex-col shadow-2xl min-h-0"
+              onDragOver={(e: React.DragEvent) => {
+                if (status.hostId === myPlayerId && !status.isStarted) {
+                  e.preventDefault();
                 }
-              }
-            }}
-          >
-            <div className="flex items-center justify-between mb-5 shrink-0">
-              <h3 className="text-white text-base font-black italic tracking-tight flex items-center gap-2">
-                <Eye size={18} className="text-emerald-400" /> 觀眾席
-              </h3>
-              <span className="bg-slate-800 text-white/40 text-[9px] font-black px-2 py-1 rounded-lg border border-slate-700 uppercase tracking-tighter">
-                {status.spectators.length}
-              </span>
-            </div>
-            <div className="flex-1 overflow-y-auto pr-1">
-              <div className="flex flex-col gap-2.5">
-                <AnimatePresence>
-                  {status.spectators.map((p) => (
-                    <div
-                      className="relative"
-                      draggable={
-                        status.hostId === myPlayerId && !status.isStarted
-                      }
-                      onDragStart={(e: React.DragEvent) => {
-                        if (status.hostId === myPlayerId && !status.isStarted) {
-                          e.dataTransfer.setData("playerId", p.id);
-                        }
-                      }}
-                    >
-                      <motion.div
-                        key={p.id}
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="flex items-center justify-between p-3 bg-slate-950/40 border border-slate-800/50 rounded-2xl group transition-all hover:border-slate-700"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-500 text-[10px] shrink-0 overflow-hidden">
-                            <AvatarDisplay avatar={p.avatar} />
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-white font-black text-xs truncate w-full flex items-center gap-1.5">
-                              {status.hostId === p.id && (
-                                <Crown
-                                  size={12}
-                                  className="text-yellow-400 shrink-0"
-                                />
-                              )}
-                              {p.name}
-                            </span>
-                            {p.winCount !== undefined && p.winCount > 0 && (
-                              <span className="text-[9px] text-slate-500 font-black flex items-center gap-1">
-                                <Trophy size={10} className="text-yellow-400" />
-                                {p.winCount}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {status.hostId === myPlayerId &&
-                          p.id !== myPlayerId && (
-                            <button
-                              onClick={() => onKickPlayer?.(p.id)}
-                              className="opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-2 rounded-xl transition-all shadow-lg active:scale-95"
-                            >
-                              <UserX size={14} />
-                            </button>
-                          )}
-                      </motion.div>
-                    </div>
-                  ))}
-                </AnimatePresence>
+              }}
+              onDrop={(e: React.DragEvent) => {
+                if (status.hostId === myPlayerId && !status.isStarted) {
+                  e.preventDefault();
+                  const pid = e.dataTransfer.getData("playerId");
+                  const player = status.players.find((p) => p?.id === pid);
+                  if (pid && player && !player.isBot) {
+                    onMovePlayer(pid, "spectator");
+                  }
+                }
+              }}
+            >
+              <div className="flex items-center justify-between mb-4 shrink-0">
+                <h3 className="text-white text-base font-black italic tracking-tight flex items-center gap-2">
+                  <Eye size={18} className="text-emerald-400" /> 觀眾席
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  {status.spectators.filter((s) => s.wantToPlay).length > 0 && (
+                    <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-black px-2 py-1 rounded-lg border border-emerald-500/30 uppercase tracking-tighter">
+                      排隊{" "}
+                      {status.spectators.filter((s) => s.wantToPlay).length}
+                    </span>
+                  )}
+                  <span className="bg-slate-800 text-white/40 text-[9px] font-black px-2 py-1 rounded-lg border border-slate-700 uppercase tracking-tighter">
+                    {status.spectators.length}
+                  </span>
+                </div>
               </div>
+              <div className="flex-1 overflow-y-auto pr-1 scrollbar-none">
+                <div className="flex flex-col gap-2">
+                  <AnimatePresence>
+                    {[...status.spectators]
+                      .sort((a, b) => {
+                        // Sort by wantToPlay status first (true comes first)
+                        if (a.wantToPlay && !b.wantToPlay) return -1;
+                        if (!a.wantToPlay && b.wantToPlay) return 1;
+                        // Within same status, maintain original order (FIFO for queue)
+                        return 0;
+                      })
+                      .map((p) => (
+                        <div
+                          key={p.id}
+                          className="relative"
+                          draggable={
+                            status.hostId === myPlayerId && !status.isStarted
+                          }
+                          onDragStart={(e: React.DragEvent) => {
+                            if (
+                              status.hostId === myPlayerId &&
+                              !status.isStarted
+                            ) {
+                              e.dataTransfer.setData("playerId", p.id);
+                            }
+                          }}
+                        >
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="flex items-center justify-between p-2.5 bg-slate-950/40 border border-slate-800/50 rounded-2xl group transition-all hover:border-slate-700"
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-500 text-[10px] shrink-0 overflow-hidden">
+                                <AvatarDisplay
+                                  avatar={p.avatar}
+                                  ownerId={p.id}
+                                />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-white font-black text-[10px] w-full flex items-center gap-1 min-w-0">
+                                  {status.hostId === p.id &&
+                                    !status.isAutoRoom && (
+                                      <Crown
+                                        size={10}
+                                        className="text-yellow-400 shrink-0"
+                                      />
+                                    )}
+                                  <ScrollingName name={p.name} maxLength={10} />
+                                </span>
+                                {p.wantToPlay && (
+                                  <span className="text-emerald-400 text-[8px] font-black">
+                                    想參加
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {p.id === myPlayerId && onToggleWantToPlay && (
+                                <button
+                                  onClick={onToggleWantToPlay}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
+                                    p.wantToPlay
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-slate-800 text-slate-400 border border-slate-700"
+                                  }`}
+                                >
+                                  {p.wantToPlay ? "取消排隊" : "加入排隊"}
+                                </button>
+                              )}
+                              {status.hostId === myPlayerId &&
+                                p.id !== myPlayerId && (
+                                  <button
+                                    onClick={() => onKickPlayer?.(p.id)}
+                                    className="opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-1 rounded-lg transition-all shadow-lg active:scale-95"
+                                  >
+                                    <UserX size={12} />
+                                  </button>
+                                )}
+                            </div>
+                          </motion.div>
+                        </div>
+                      ))}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Stand Up Button for Seated Players */}
+              {!status.isStarted &&
+                status.players.some((p) => p?.id === myPlayerId) &&
+                onStandUp && (
+                  <div className="shrink-0 pt-3 border-t border-slate-800/50">
+                    <button
+                      onClick={onStandUp}
+                      className="w-full py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-slate-300 rounded-xl font-black transition-all text-[11px] flex items-center justify-center gap-2 border border-slate-700/50"
+                    >
+                      <ArrowDown size={14} />
+                      移至觀眾席
+                    </button>
+                  </div>
+                )}
             </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {/* Final Settlement Overlay */}
+      <AnimatePresence>
+        {status.isSeriesOver && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4 lg:p-8"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-4xl bg-slate-900/50 border border-white/10 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="p-8 lg:p-10 text-center relative border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-1 bg-gradient-to-r from-transparent via-purple-500 to-transparent rounded-full" />
+                <h2 className="text-4xl lg:text-6xl font-black italic tracking-tighter text-white mb-2">
+                  最終結算
+                </h2>
+                <div className="flex items-center justify-center gap-2 text-purple-400 font-black uppercase tracking-[0.3em] text-[10px] lg:text-xs">
+                  <Trophy size={14} /> Series Final Results
+                </div>
+              </div>
+
+              {/* Score Table */}
+              <div className="flex-1 overflow-auto p-6 lg:p-10">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[10px] lg:text-xs text-slate-500 font-black uppercase tracking-widest">
+                      <th className="pb-4 pl-4">Round</th>
+                      {status.players.map((p, i) => (
+                        <th key={i} className="pb-4 text-center">
+                          {p ? p.name : `Seat ${i + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.02]">
+                    {(status.seriesResults || []).map((res) => {
+                      const target = status.targetRounds || 5;
+                      let isDouble = false;
+                      if (status.isDoubleStakeEnabled) {
+                        if (target === 2 && res.round === 2) isDouble = true;
+                        else if (target === 5 && res.round >= 4)
+                          isDouble = true;
+                        else if (target === 7 && res.round >= 6)
+                          isDouble = true;
+                        else if (target === 10 && res.round >= 8)
+                          isDouble = true;
+                      }
+                      return (
+                        <tr
+                          key={res.round}
+                          className="group hover:bg-white/[0.01] transition-colors"
+                        >
+                          <td className="py-4 pl-4 font-black text-slate-400 flex items-center gap-2">
+                            #{res.round}
+                            {isDouble && (
+                              <span className="text-[8px] bg-orange-500/10 text-orange-400 px-1 rounded border border-orange-500/20">
+                                x2
+                              </span>
+                            )}
+                          </td>
+                          {status.players.map((p, i) => {
+                            const score = p ? res.scores[p.id] || 0 : 0;
+                            return (
+                              <td
+                                key={i}
+                                className={`py-4 text-center font-bold ${score > 0 ? "text-emerald-400" : score < 0 ? "text-red-400" : "text-slate-600"}`}
+                              >
+                                {score > 0 ? `+${score}` : score}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-white/[0.03] border-t-2 border-white/10">
+                      <td className="py-6 pl-4 font-black text-white italic">
+                        TOTAL
+                      </td>
+                      {status.players.map((p, i) => {
+                        const total = p?.score || 0;
+                        const isMax =
+                          p &&
+                          total ===
+                            Math.max(
+                              ...status.players.map(
+                                (pl) => pl?.score || -Infinity,
+                              ),
+                            );
+                        return (
+                          <td key={i} className="py-6 text-center relative">
+                            <div
+                              className={`text-xl lg:text-2xl font-black ${total > 0 ? "text-emerald-400" : total < 0 ? "text-red-400" : "text-white"}`}
+                            >
+                              {total > 0 ? `+${total}` : total}
+                            </div>
+                            {isMax && p && (
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-yellow-400/10 text-yellow-500 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter">
+                                <Trophy size={8} /> Winner
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="p-8 bg-slate-950/50 border-t border-white/5 flex items-center justify-between gap-4">
+                <button
+                  onClick={onLeave}
+                  className="px-8 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-black text-sm transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <LogOut size={16} /> 返回大廳
+                </button>
+                {status.hostId === myPlayerId && (
+                  <button
+                    onClick={onResetSeries}
+                    className="flex-1 py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl font-black text-base shadow-xl shadow-purple-600/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw size={20} /> 重新開始系列賽
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

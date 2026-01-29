@@ -59,14 +59,35 @@ export interface Player {
   hand: Card[];
   isReady: boolean;
   winCount: number;
+  gameCount: number;
   isBot?: boolean;
+  isOffline?: boolean;
+  offlineTime?: number;
   role: "player" | "spectator";
   avatar?: string;
+  afkCount?: number; // Track consecutive timeouts
   stats?: {
     totalGames: number;
     totalWins: number;
     handCounts: Record<HandType, number>;
   };
+  score?: number; // Score Mode points
+  wantToPlay?: boolean;
+}
+
+export interface HistoryEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  action: "play" | "pass";
+  hand?: Hand;
+  timestamp: number;
+  isNewRound?: boolean;
+}
+
+export interface RoundResult {
+  round: number;
+  scores: Record<string, number>; // playerId -> points earned/lost in this round
 }
 
 export interface GameStatus {
@@ -92,4 +113,15 @@ export interface GameStatus {
   autoStartCountdown?: number | null;
   isPublic: boolean;
   autoStartCanceller?: string | null;
+  history: HistoryEntry[];
+  gameMode: "normal" | "score";
+  targetRounds?: number;
+  currentRound?: number;
+  seriesResults?: RoundResult[];
+  isSeriesOver?: boolean;
+  seatMode?: string;
+  isQuickMatch?: boolean;
+  isDoubleStakeEnabled?: boolean;
+  isAutoRoom?: boolean;
+  lastUpdateTime?: number;
 }
