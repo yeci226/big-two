@@ -1798,9 +1798,11 @@ export default function Home() {
         const socket = getSocket();
         socket.emit("leave-room", roomId, myPlayerId);
 
-        setTimeout(() => {
-          window.location.href = window.location.pathname;
-        }, 100);
+        // Immediate SPA transition
+        setView("menu");
+        setRoomId("");
+        setRoomIdFromUrl(false);
+        window.history.pushState({}, "", "/");
         return;
       }
     } else {
@@ -1838,15 +1840,23 @@ export default function Home() {
       const socket = getSocket();
       socket.emit("leave-room", roomId, myPlayerId);
 
-      setTimeout(() => {
-        window.location.href = window.location.pathname;
-      }, 100);
+      // Immediate SPA transition
+      setView("menu");
+      setRoomId("");
+      setRoomIdFromUrl(false);
+      window.history.pushState({}, "", "/");
       return;
     }
 
+    // Fallback for spectator in started game or other cases
     const socket = getSocket();
     socket.emit("leave-room", roomId, myPlayerId);
-    window.location.href = window.location.pathname;
+
+    // Immediate SPA transition
+    setView("menu");
+    setRoomId("");
+    setRoomIdFromUrl(false);
+    window.history.pushState({}, "", "/");
   };
 
   const handleSkipCooldown = () => {
