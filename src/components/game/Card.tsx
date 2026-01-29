@@ -57,13 +57,13 @@ export default function Card({
         {...attributes}
         {...listeners}
         className={cn(
-          "w-16 h-24 sm:w-24 sm:h-36 rounded-lg border-2 border-white bg-blue-600 shadow-lg flex items-center justify-center overflow-hidden",
+          "w-16 h-24 sm:w-18 sm:h-26 md:w-24 md:h-36 rounded-xl border-2 border-white bg-blue-600 shadow-lg flex items-center justify-center overflow-hidden",
           "bg-gradient-to-br from-blue-500 to-blue-800",
           isDragging && "opacity-50",
           className,
         )}
       >
-        <div className="w-full h-full border-4 border-blue-400/30 rounded-md flex items-center justify-center">
+        <div className="w-full h-full border-4 border-blue-400/30 rounded-lg flex items-center justify-center">
           <div className="text-white/20 text-4xl font-bold italic select-none">
             B2
           </div>
@@ -87,7 +87,7 @@ export default function Card({
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
       onClick={!disabled ? onClick : undefined}
       className={cn(
-        "relative w-16 h-24 sm:w-24 sm:h-36 rounded-lg bg-white border-2 border-slate-200 shadow-md flex flex-col p-2 cursor-pointer select-none",
+        "relative w-16 h-24 sm:w-18 sm:h-26 md:w-24 md:h-36 rounded-xl bg-white border-2 border-slate-200 shadow-md flex flex-col p-2.5 cursor-pointer select-none",
         selected && "border-blue-500 shadow-blue-200 shadow-xl",
         disabled && "cursor-not-allowed",
         isDragging && "z-50 shadow-2xl",
@@ -100,13 +100,17 @@ export default function Card({
           isRed ? "text-red-500" : "text-slate-900",
         )}
       >
-        <span className="text-lg sm:text-2xl font-bold">{card.rank}</span>
-        <span className="text-sm sm:text-xl">{SuitLabels[card.suit]}</span>
+        <span className="text-lg sm:text-xl md:text-2xl font-black">
+          {card.rank}
+        </span>
+        <span className="text-sm sm:text-base md:text-xl">
+          {SuitLabels[card.suit]}
+        </span>
       </div>
 
       <div
         className={cn(
-          "absolute inset-0 flex items-center justify-center text-4xl sm:text-6xl opacity-20 pointer-events-none",
+          "absolute inset-0 flex items-center justify-center text-4xl sm:text-5xl md:text-6xl opacity-20 pointer-events-none",
           isRed ? "text-red-500" : "text-slate-900",
         )}
       >
@@ -119,8 +123,12 @@ export default function Card({
           isRed ? "text-red-500" : "text-slate-900",
         )}
       >
-        <span className="text-lg sm:text-2xl font-bold">{card.rank}</span>
-        <span className="text-sm sm:text-xl">{SuitLabels[card.suit]}</span>
+        <span className="text-lg sm:text-xl md:text-2xl font-black">
+          {card.rank}
+        </span>
+        <span className="text-sm sm:text-base md:text-xl">
+          {SuitLabels[card.suit]}
+        </span>
       </div>
     </motion.div>
   );

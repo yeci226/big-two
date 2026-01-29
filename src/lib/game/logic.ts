@@ -568,22 +568,30 @@ export const getSmartBotPlay = (
           return h && h.type !== "FourOfAKind" && h.type !== "StraightFlush";
         });
         if (nonBombs.length > 0) {
-          // Find the one with the smallest max card weight (approx weakest)
-          // findFiveCardHands implementation order is roughly rank-based, so first is usually weakest.
-          return nonBombs[0];
+          // Sort non-bombs by strength (weakest first)
+          const identifiedNonBombs = nonBombs
+            .map((f) => identifyHand(f))
+            .filter((h): h is Hand => h !== null)
+            .sort((a, b) => a.strength - b.strength);
+
+          return identifiedNonBombs[0].cards;
         }
       } else {
         // Late game: play whatever (even bombs if it helps clear hand)
-        return myFives[0];
+        const identifiedFives = myFives
+          .map((f) => identifyHand(f))
+          .filter((h): h is Hand => h !== null)
+          .sort((a, b) => a.strength - b.strength);
+
+        return identifiedFives[0].cards;
       }
     }
 
     // C. Play Pairs (clears cards faster than singles)
     const pairs = getAllPairs(sorted);
     if (pairs.length > 0) {
-      // Prefer small pairs
-      // Filter out pairs that break A or 2? Maybe.
-      // For now, just play smallest pair.
+      // Prefer small pairs to save high cards for singles control
+      // We already have pairs sorted by strength if getAllPairs follows sortedHand order
       return pairs[0];
     }
 
@@ -700,10 +708,12 @@ export const getSmartBotPlay = (
     ].includes(lastPlayed.type)
   ) {
     // Check against my 5-card hands
-    for (const f of myFives) {
-      const h = identifyHand(f);
-      if (h && compareHands(h, lastPlayed)) return f;
-    }
+    const validFives = myFives
+      .map((f) => identifyHand(f))
+      .filter((h): h is Hand => h !== null && compareHands(h, lastPlayed))
+      .sort((a, b) => a.strength - b.strength);
+
+    if (validFives.length > 0) return validFives[0].cards;
     return null;
   }
 

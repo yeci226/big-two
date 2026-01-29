@@ -2324,7 +2324,7 @@ export default function Home() {
             const nextPlayer = gameStatus.players[nextPlayerIndex];
             const nextPlayerHandSize = nextPlayer ? nextPlayer.hand.length : 0;
 
-            // AFK Bot / Timeout -> Use DUMB Bot (only smallest single or pass)
+            // AFK Bot / Timeout -> Use DUMB Bot (AFK Logic)
             const aiCards = getDumbBotPlay(
               currentPlayer.hand,
               hasControl ? null : gameStatus.lastPlayedHand,
@@ -2404,7 +2404,7 @@ export default function Home() {
 
   if (view === "menu") {
     return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden text-white">
+      <main className="min-h-screen bg-slate-950 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden text-white">
         {/* Background Decorations */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full" />
@@ -2489,10 +2489,10 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-8 lg:p-10 rounded-[3rem] shadow-2xl relative z-10"
+          className="w-full max-w-md bg-slate-900/40 backdrop-blur-3xl border border-white/5 p-5 sm:p-8 lg:p-10 rounded-[3rem] shadow-2xl relative z-10"
         >
           <div className="text-center mb-10">
-            <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-white/20 italic tracking-tighter mb-2">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-white/20 italic tracking-tighter mb-2">
               BIG TWO
             </h1>
             <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.4em] opacity-80">
@@ -2501,12 +2501,12 @@ export default function Home() {
           </div>
 
           {/* Career Stats Section */}
-          <div className="bg-slate-950/50 rounded-2xl p-4 mb-6 border border-white/5 flex justify-between items-center shadow-inner">
+          <div className="bg-slate-950/50 rounded-2xl p-3 sm:p-4 mb-5 sm:mb-6 border border-white/5 flex justify-between items-center shadow-inner">
             <div className="flex flex-col">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                 總場數
               </span>
-              <span className="text-white font-black text-lg">
+              <span className="text-white font-black text-base sm:text-lg">
                 {careerStats.totalGames}
               </span>
             </div>
@@ -2514,7 +2514,7 @@ export default function Home() {
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                 獲勝數
               </span>
-              <span className="text-emerald-400 font-black text-lg">
+              <span className="text-emerald-400 font-black text-base sm:text-lg">
                 {careerStats.totalWins}
               </span>
             </div>
@@ -2522,7 +2522,7 @@ export default function Home() {
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                 勝率
               </span>
-              <span className="text-blue-400 font-black text-lg">
+              <span className="text-blue-400 font-black text-base sm:text-lg">
                 {careerStats.totalGames > 0
                   ? (
                       (careerStats.totalWins / careerStats.totalGames) *
@@ -2577,7 +2577,7 @@ export default function Home() {
                 placeholder="輸入玩家名字..."
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
-                className="w-full text-center bg-transparent text-2xl lg:text-3xl font-black text-white placeholder:text-slate-700 border-b-2 border-slate-800 focus:border-blue-500 outline-none pb-2 transition-colors uppercase tracking-tight"
+                className="w-full text-center bg-transparent text-xl sm:text-2xl lg:text-3xl font-black text-white placeholder:text-slate-700 border-b-2 border-slate-800 focus:border-blue-500 outline-none pb-2 transition-colors uppercase tracking-tight"
               />
 
               <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-800/50">
@@ -2663,7 +2663,7 @@ export default function Home() {
                 <button
                   onClick={() => handleQuickJoin()}
                   disabled={isQuickJoining}
-                  className={`group relative overflow-hidden w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-blue-600/20 ${isQuickJoining ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`group relative overflow-hidden w-full py-3.5 sm:py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-blue-600/20 ${isQuickJoining ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {isQuickJoining ? (
                     <span className="flex items-center gap-2">
@@ -2681,14 +2681,14 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => joinGame("create")}
-                    className="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border border-white/5"
+                    className="py-3 sm:py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border border-white/5"
                   >
                     <Plus size={20} className="text-emerald-400" />
                     <span>創建房間</span>
                   </button>
                   <button
                     onClick={() => joinGame("single")}
-                    className="py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border border-white/5"
+                    className="py-3 sm:py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border border-white/5"
                   >
                     <User size={20} className="text-blue-400" />
                     <span>單人練習</span>
@@ -2712,7 +2712,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen w-full bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30 overflow-hidden fixed inset-0">
-      <div className="w-full max-w-7xl h-full mx-auto flex flex-col relative z-10 px-4 py-4 lg:py-8">
+      <div className="w-full max-w-7xl h-full mx-auto flex flex-col relative z-10 px-2 py-2 sm:px-4 sm:py-4 lg:py-8">
         <GameTable
           status={gameStatus}
           myPlayerId={myPlayerId}
