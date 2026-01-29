@@ -484,10 +484,10 @@ export default function GameTable({
         <div className="flex-1 flex flex-col gap-3 min-h-0 relative z-0">
           {/* Top Header */}
           <div className="shrink-0 relative z-50">
-            <div className="flex justify-between items-center bg-slate-950/60 p-3 sm:p-4 rounded-3xl border border-white/5 backdrop-blur-xl shadow-2xl">
+            <div className="w-full flex justify-between items-center bg-slate-950/60 p-3 sm:p-4 rounded-3xl border border-white/5 backdrop-blur-xl shadow-2xl">
               {/* Left Side - Room Info */}
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="flex flex-col gap-0.5 shrink-0 whitespace-nowrap">
+              <div className="flex items-center gap-3 overflow-hidden whitespace-nowrap">
+                <div className="flex flex-col gap-0.5 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                       {isSinglePlayer ? (
@@ -555,7 +555,7 @@ export default function GameTable({
                   {/* Public Toggle */}
                   {!isSinglePlayer &&
                     (status.isAutoRoom ? (
-                      <div className="h-8 px-3 rounded-lg text-xs font-black flex items-center bg-blue-500/10 text-blue-400/70 border border-blue-500/20 whitespace-nowrap">
+                      <div className="h-8 px-3 rounded-lg text-xs font-black flex items-center bg-blue-500/10 text-blue-400/70 border border-blue-500/20 whitespace-nowrap shrink-0">
                         公開房間
                       </div>
                     ) : status.hostId === myPlayerId ? (
@@ -568,13 +568,13 @@ export default function GameTable({
                       </button>
                     ) : (
                       <div
-                        className={`h-8 px-3 rounded-lg text-xs font-black flex items-center border whitespace-nowrap ${status.isPublic ? "bg-blue-500/10 text-blue-400/70 border-blue-500/20" : "bg-slate-800/50 text-slate-500 border-slate-700/50"}`}
+                        className={`h-8 px-3 rounded-lg text-xs font-black flex items-center border whitespace-nowrap shrink-0 ${status.isPublic ? "bg-blue-500/10 text-blue-400/70 border-blue-500/20" : "bg-slate-800/50 text-slate-500 border-slate-700/50"}`}
                       >
                         {status.isPublic ? "公開房間" : "私人房間"}
                       </div>
                     ))}
 
-                  {/* Game Mode */}
+                  {/* Game Mode & Options Group */}
                   {status.hostId === myPlayerId &&
                   !status.isStarted &&
                   (status.currentRound || 1) === 1 ? (
@@ -608,6 +608,107 @@ export default function GameTable({
                     >
                       {status.gameMode === "score" ? "積分模式" : "一般模式"}
                     </div>
+                  )}
+
+                  {/* Rounds Selection (Score Mode Only) */}
+                  {status.gameMode === "score" && (
+                    <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5 gap-1">
+                      <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 whitespace-nowrap">
+                        {[2, 5, 7, 10].map((r) => (
+                          <button
+                            key={r}
+                            onClick={() =>
+                              status.hostId === myPlayerId &&
+                              !status.isStarted &&
+                              onUpdateGameSettings(
+                                "score",
+                                r,
+                                status.isDoubleStakeEnabled,
+                              )
+                            }
+                            disabled={
+                              status.hostId !== myPlayerId || status.isStarted
+                            }
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all whitespace-nowrap ${
+                              (status.targetRounds || 5) === r
+                                ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20"
+                                : "text-slate-500 hover:text-slate-300"
+                            } ${
+                              status.hostId !== myPlayerId || status.isStarted
+                                ? "cursor-default"
+                                : ""
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+
+                      {status.hostId === myPlayerId && !status.isStarted ? (
+                        <button
+                          onClick={() =>
+                            onUpdateGameSettings(
+                              "score",
+                              status.targetRounds || 5,
+                              !status.isDoubleStakeEnabled,
+                            )
+                          }
+                          className={`px-1 py-1 rounded-lg text-xs font-black transition-all border ${
+                            status.isDoubleStakeEnabled
+                              ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                              : "bg-slate-800 text-slate-500 border-transparent hover:text-slate-400"
+                          }`}
+                        >
+                          <Zap size={16} />
+                        </button>
+                      ) : (
+                        status.isDoubleStakeEnabled && (
+                          <div className="px-1 py-1 rounded-lg text-xs font-black bg-orange-500/10 text-orange-400 border border-orange-500/20 whitespace-nowrap">
+                            <Zap size={16} />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* Seat Mode Selection */}
+                  {!isSinglePlayer && (
+                    <>
+                      <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5">
+                        {status.hostId === myPlayerId &&
+                        !status.isStarted &&
+                        onUpdateSeatMode ? (
+                          <>
+                            <button
+                              onClick={() => onUpdateSeatMode("free")}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                            >
+                              自由
+                            </button>
+                            <button
+                              onClick={() => onUpdateSeatMode("manual")}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white shadow-lg shadow-amber-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                            >
+                              手動
+                            </button>
+                            <button
+                              onClick={() => onUpdateSeatMode("elimination")}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white shadow-lg shadow-red-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                            >
+                              淘汰
+                            </button>
+                          </>
+                        ) : (
+                          <div className="px-3 py-1.5 text-xs font-black text-slate-400">
+                            {(status.seatMode || "free") === "free"
+                              ? "自由選位"
+                              : (status.seatMode || "free") === "manual"
+                                ? "房主手動"
+                                : "淘汰制"}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -646,166 +747,165 @@ export default function GameTable({
                 {/* Desktop Leave Button */}
                 <button
                   onClick={onLeave}
-                  className="hidden lg:flex px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all items-center gap-2 font-bold text-xs"
+                  className="hidden lg:flex px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all items-center gap-2 font-bold text-xs  whitespace-nowrap"
                 >
                   <LogOut size={16} /> 離開
                 </button>
               </div>
-            </div>
+              {/* Mobile Dropdown Menu */}
+              <AnimatePresence>
+                {isHeaderMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    className="absolute top-full mt-2 left-0 right-0 lg:hidden bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-3xl p-6 z-50 overflow-hidden"
+                  >
+                    <div className="flex flex-col gap-6">
+                      {/* Settings Section */}
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
+                            房間隱私
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {!isSinglePlayer &&
+                              (status.isAutoRoom ? (
+                                <div className="py-3 px-4 rounded-xl bg-blue-500/10 text-blue-400 text-xs font-black border border-blue-500/20 text-center">
+                                  公開房間
+                                </div>
+                              ) : status.hostId === myPlayerId ? (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      !status.isPublic && onTogglePublic()
+                                    }
+                                    disabled={status.isStarted}
+                                    className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.isPublic ? "bg-blue-600 text-white shadow-lg" : "bg-slate-800 text-slate-500"}`}
+                                  >
+                                    公開
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      status.isPublic && onTogglePublic()
+                                    }
+                                    disabled={status.isStarted}
+                                    className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${!status.isPublic ? "bg-slate-700 text-white shadow-lg" : "bg-slate-800 text-slate-500"}`}
+                                  >
+                                    私人
+                                  </button>
+                                </>
+                              ) : (
+                                <div className="col-span-2 py-3 px-4 rounded-xl bg-slate-800 text-slate-400 text-xs font-black border border-white/5 text-center">
+                                  {status.isPublic ? "公開房間" : "私人房間"}
+                                </div>
+                              ))}
+                          </div>
+                        </div>
 
-            {/* Mobile Dropdown Menu */}
-            <AnimatePresence>
-              {isHeaderMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                  className="absolute top-full mt-2 left-0 right-0 lg:hidden bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-3xl p-6 z-50 overflow-hidden"
-                >
-                  <div className="flex flex-col gap-6">
-                    {/* Settings Section */}
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="flex flex-col gap-2">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
-                          房間隱私
-                        </span>
-                        <div className="grid grid-cols-2 gap-2">
-                          {!isSinglePlayer &&
-                            (status.isAutoRoom ? (
-                              <div className="py-3 px-4 rounded-xl bg-blue-500/10 text-blue-400 text-xs font-black border border-blue-500/20 text-center">
-                                公開房間
-                              </div>
-                            ) : status.hostId === myPlayerId ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
+                            遊戲模式
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {status.hostId === myPlayerId &&
+                            !status.isStarted &&
+                            (status.currentRound || 1) === 1 ? (
                               <>
                                 <button
                                   onClick={() =>
-                                    !status.isPublic && onTogglePublic()
+                                    onUpdateGameSettings(
+                                      "normal",
+                                      status.targetRounds || 5,
+                                    )
                                   }
-                                  disabled={status.isStarted}
-                                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.isPublic ? "bg-blue-600 text-white shadow-lg" : "bg-slate-800 text-slate-500"}`}
+                                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.gameMode === "normal" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "bg-slate-800 text-slate-500"}`}
                                 >
-                                  公開
+                                  一般模式
                                 </button>
                                 <button
                                   onClick={() =>
-                                    status.isPublic && onTogglePublic()
+                                    onUpdateGameSettings(
+                                      "score",
+                                      status.targetRounds || 5,
+                                    )
                                   }
-                                  disabled={status.isStarted}
-                                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${!status.isPublic ? "bg-slate-700 text-white shadow-lg" : "bg-slate-800 text-slate-500"}`}
+                                  className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.gameMode === "score" ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" : "bg-slate-800 text-slate-500"}`}
                                 >
-                                  私人
+                                  積分模式
                                 </button>
                               </>
                             ) : (
                               <div className="col-span-2 py-3 px-4 rounded-xl bg-slate-800 text-slate-400 text-xs font-black border border-white/5 text-center">
-                                {status.isPublic ? "公開房間" : "私人房間"}
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
-                          遊戲模式
-                        </span>
-                        <div className="grid grid-cols-2 gap-2">
-                          {status.hostId === myPlayerId &&
-                          !status.isStarted &&
-                          (status.currentRound || 1) === 1 ? (
-                            <>
-                              <button
-                                onClick={() =>
-                                  onUpdateGameSettings(
-                                    "normal",
-                                    status.targetRounds || 5,
-                                  )
-                                }
-                                className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.gameMode === "normal" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "bg-slate-800 text-slate-500"}`}
-                              >
-                                一般模式
-                              </button>
-                              <button
-                                onClick={() =>
-                                  onUpdateGameSettings(
-                                    "score",
-                                    status.targetRounds || 5,
-                                  )
-                                }
-                                className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${status.gameMode === "score" ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" : "bg-slate-800 text-slate-500"}`}
-                              >
-                                積分模式
-                              </button>
-                            </>
-                          ) : (
-                            <div className="col-span-2 py-3 px-4 rounded-xl bg-slate-800 text-slate-400 text-xs font-black border border-white/5 text-center">
-                              {status.gameMode === "score"
-                                ? `積分模式 (${status.targetRounds}局)`
-                                : "一般模式"}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {!isSinglePlayer && (
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
-                            選位模式
-                          </span>
-                          <div className="grid grid-cols-3 gap-2">
-                            {status.hostId === myPlayerId &&
-                            !status.isStarted &&
-                            onUpdateSeatMode ? (
-                              <>
-                                <button
-                                  onClick={() => onUpdateSeatMode("free")}
-                                  className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-500"}`}
-                                >
-                                  自由
-                                </button>
-                                <button
-                                  onClick={() => onUpdateSeatMode("manual")}
-                                  className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-500"}`}
-                                >
-                                  手動
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    onUpdateSeatMode("elimination")
-                                  }
-                                  className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white" : "bg-slate-800 text-slate-500"}`}
-                                >
-                                  淘汰
-                                </button>
-                              </>
-                            ) : (
-                              <div className="col-span-3 py-3 px-4 rounded-xl bg-slate-800 text-slate-400 text-xs font-black border border-white/5 text-center">
-                                {(status.seatMode || "free") === "free"
-                                  ? "自由選位"
-                                  : (status.seatMode || "free") === "manual"
-                                    ? "房主手動"
-                                    : "淘汰制"}
+                                {status.gameMode === "score"
+                                  ? `積分模式 (${status.targetRounds}局)`
+                                  : "一般模式"}
                               </div>
                             )}
                           </div>
                         </div>
-                      )}
+
+                        {!isSinglePlayer && (
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
+                              選位模式
+                            </span>
+                            <div className="grid grid-cols-3 gap-2">
+                              {status.hostId === myPlayerId &&
+                              !status.isStarted &&
+                              onUpdateSeatMode ? (
+                                <>
+                                  <button
+                                    onClick={() => onUpdateSeatMode("free")}
+                                    className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-500"}`}
+                                  >
+                                    自由
+                                  </button>
+                                  <button
+                                    onClick={() => onUpdateSeatMode("manual")}
+                                    className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-500"}`}
+                                  >
+                                    手動
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      onUpdateSeatMode("elimination")
+                                    }
+                                    className={`py-2 rounded-lg text-[9px] font-black transition-all ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white" : "bg-slate-800 text-slate-500"}`}
+                                  >
+                                    淘汰
+                                  </button>
+                                </>
+                              ) : (
+                                <div className="col-span-3 py-3 px-4 rounded-xl bg-slate-800 text-slate-400 text-xs font-black border border-white/5 text-center">
+                                  {(status.seatMode || "free") === "free"
+                                    ? "自由選位"
+                                    : (status.seatMode || "free") === "manual"
+                                      ? "房主手動"
+                                      : "淘汰制"}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="h-px bg-slate-800 w-full" />
+
+                      <button
+                        onClick={() => {
+                          setIsHeaderMenuOpen(false);
+                          onLeave();
+                        }}
+                        className="w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-red-600/20 active:scale-95 transition-all"
+                      >
+                        <LogOut size={18} /> 離開房間
+                      </button>
                     </div>
-
-                    <div className="h-px bg-slate-800 w-full" />
-
-                    <button
-                      onClick={() => {
-                        setIsHeaderMenuOpen(false);
-                        onLeave();
-                      }}
-                      className="w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-red-600/20 active:scale-95 transition-all"
-                    >
-                      <LogOut size={18} /> 離開房間
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Table View */}
@@ -1648,7 +1748,9 @@ export default function GameTable({
         <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 min-h-0">
           {/* History Panel - Top half or separate */}
           <div
-            className={`flex-[3] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-4 sm:p-5 flex flex-col shadow-2xl min-h-0 transition-all ${historyCollapsed ? "flex-none h-14" : ""}`}
+            className={`flex-[3] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-4 sm:p-5 flex flex-col shadow-2xl min-h-0 transition-all ${
+              historyCollapsed ? "flex-none h-14 lg:flex-[3] lg:h-auto" : ""
+            }`}
           >
             <div
               className="flex items-center justify-between mb-4 shrink-0 cursor-pointer"
@@ -1668,80 +1770,86 @@ export default function GameTable({
                 )}
               </div>
             </div>
-            {!historyCollapsed && (
-              <div className="flex-1 overflow-y-auto pr-1 space-y-2 scrollbar-none">
-                <AnimatePresence initial={false}>
-                  {status.history?.map((entry) => (
-                    <div key={entry.id} className="flex flex-col gap-2">
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="p-3 bg-slate-950/60 border border-slate-800/50 rounded-2xl flex flex-col gap-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-slate-400 truncate max-w-[100px]">
-                            {entry.playerName}
-                          </span>
-                          <span className="text-[8px] font-bold text-slate-600">
-                            {new Date(entry.timestamp).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                        {entry.action === "play" && entry.hand ? (
-                          <div className="flex flex-col gap-1">
-                            <div className="flex gap-1 flex-wrap">
-                              {entry.hand.cards.map((c, i) => {
-                                const isRed =
-                                  c.suit === "Hearts" || c.suit === "Diamonds";
-                                return (
-                                  <div
-                                    key={i}
-                                    className="w-5 h-7 lg:w-6 lg:h-8 bg-white rounded-[2px] border border-slate-300 flex flex-col items-center justify-center relative shadow-sm"
+            <div
+              className={`flex-1 overflow-y-auto pr-1 space-y-2 scrollbar-none ${
+                historyCollapsed ? "hidden lg:block" : ""
+              }`}
+            >
+              <AnimatePresence initial={false}>
+                {status.history?.map((entry) => (
+                  <div key={entry.id} className="flex flex-col gap-2">
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 bg-slate-950/60 border border-slate-800/50 rounded-2xl flex flex-col gap-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-400 truncate max-w-[100px]">
+                          {entry.playerName}
+                        </span>
+                        <span className="text-[8px] font-bold text-slate-600">
+                          {new Date(entry.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      {entry.action === "play" && entry.hand ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-1 flex-wrap">
+                            {entry.hand.cards.map((c, i) => {
+                              const isRed =
+                                c.suit === "Hearts" || c.suit === "Diamonds";
+                              return (
+                                <div
+                                  key={i}
+                                  className="w-5 h-7 lg:w-6 lg:h-8 bg-white rounded-[2px] border border-slate-300 flex flex-col items-center justify-center relative shadow-sm"
+                                >
+                                  <span
+                                    className={`text-[8px] lg:text-[10px] font-black leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
                                   >
-                                    <span
-                                      className={`text-[8px] lg:text-[10px] font-black leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
-                                    >
-                                      {c.rank}
-                                    </span>
-                                    <span
-                                      className={`text-[6px] lg:text-[8px] leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
-                                    >
-                                      {SuitLabels[c.suit]}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                    {c.rank}
+                                  </span>
+                                  <span
+                                    className={`text-[6px] lg:text-[8px] leading-none ${isRed ? "text-red-500" : "text-slate-900"}`}
+                                  >
+                                    {SuitLabels[c.suit]}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ) : (
-                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-0.5 rounded-lg w-fit flex items-center gap-2">
-                            <SkipForward size={10} /> 過牌
-                          </div>
-                        )}
-                      </motion.div>
-                      {entry.isNewRound && (
-                        <div className="py-2 flex items-center gap-3 px-2">
-                          <div className="flex-1 h-px bg-slate-800" />
-                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest whitespace-nowrap italic">
-                            新回合
-                          </span>
-                          <div className="flex-1 h-px bg-slate-800" />
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-0.5 rounded-lg w-fit flex items-center gap-2">
+                          <SkipForward size={10} /> 過牌
                         </div>
                       )}
-                    </div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+                    </motion.div>
+                    {entry.isNewRound && (
+                      <div className="py-2 flex items-center gap-3 px-2">
+                        <div className="flex-1 h-px bg-slate-800" />
+                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest whitespace-nowrap italic">
+                          新回合
+                        </span>
+                        <div className="flex-1 h-px bg-slate-800" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Spectator List - Bottom half */}
           {!status.isAutoRoom && (
             <div
-              className={`flex-[2] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-4 sm:p-5 flex flex-col shadow-2xl min-h-0 transition-all ${spectatorsCollapsed ? "flex-none h-14" : ""}`}
+              className={`flex-[2] bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-4 sm:p-5 flex flex-col shadow-2xl min-h-0 transition-all ${
+                spectatorsCollapsed
+                  ? "flex-none h-14 lg:flex-[2] lg:h-auto"
+                  : ""
+              }`}
               onDragOver={(e: React.DragEvent) => {
                 if (status.hostId === myPlayerId && !status.isStarted) {
                   e.preventDefault();
@@ -1784,110 +1892,108 @@ export default function GameTable({
                   </span>
                 </div>
               </div>
-              {!spectatorsCollapsed && (
-                <div className="flex-1 overflow-y-auto pr-1 scrollbar-none">
-                  <div className="flex flex-col gap-2">
-                    <AnimatePresence>
-                      {[...status.spectators]
-                        .sort((a, b) => {
-                          // Sort by wantToPlay status first (true comes first)
-                          if (a.wantToPlay && !b.wantToPlay) return -1;
-                          if (!a.wantToPlay && b.wantToPlay) return 1;
-                          // Within same status, maintain original order (FIFO for queue)
-                          return 0;
-                        })
-                        .map((p) => (
-                          <div
-                            key={p.id}
-                            className="relative"
-                            draggable={
-                              status.hostId === myPlayerId && !status.isStarted
+              <div
+                className={`flex-1 overflow-y-auto pr-1 scrollbar-none ${
+                  spectatorsCollapsed ? "hidden lg:block" : ""
+                }`}
+              >
+                <div className="flex flex-col gap-2">
+                  <AnimatePresence>
+                    {[...status.spectators]
+                      .sort((a, b) => {
+                        // Sort by wantToPlay status first (true comes first)
+                        if (a.wantToPlay && !b.wantToPlay) return -1;
+                        if (!a.wantToPlay && b.wantToPlay) return 1;
+                        // Within same status, maintain original order (FIFO for queue)
+                        return 0;
+                      })
+                      .map((p) => (
+                        <div
+                          key={p.id}
+                          className="relative"
+                          draggable={
+                            status.hostId === myPlayerId && !status.isStarted
+                          }
+                          onDragStart={(e: React.DragEvent) => {
+                            if (
+                              status.hostId === myPlayerId &&
+                              !status.isStarted
+                            ) {
+                              e.dataTransfer.setData("playerId", p.id);
                             }
-                            onDragStart={(e: React.DragEvent) => {
-                              if (
-                                status.hostId === myPlayerId &&
-                                !status.isStarted
-                              ) {
-                                e.dataTransfer.setData("playerId", p.id);
-                              }
-                            }}
+                          }}
+                        >
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="flex items-center justify-between p-2.5 bg-slate-950/40 border border-slate-800/50 rounded-2xl group transition-all hover:border-slate-700"
                           >
-                            <motion.div
-                              initial={{ opacity: 0, x: 10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              className="flex items-center justify-between p-2.5 bg-slate-950/40 border border-slate-800/50 rounded-2xl group transition-all hover:border-slate-700"
-                            >
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-500 text-[10px] shrink-0 overflow-hidden">
-                                  <AvatarDisplay
-                                    avatar={p.avatar}
-                                    ownerId={p.id}
-                                  />
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-white font-black text-[10px] w-full flex items-center gap-1 min-w-0">
-                                    {status.hostId === p.id &&
-                                      !status.isAutoRoom && (
-                                        <Crown
-                                          size={10}
-                                          className="text-yellow-400 shrink-0"
-                                        />
-                                      )}
-                                    <ScrollingName
-                                      name={p.name}
-                                      maxLength={10}
-                                    />
-                                  </span>
-                                  {p.wantToPlay && (
-                                    <span className="text-emerald-400 text-[8px] font-black">
-                                      想參加
-                                    </span>
-                                  )}
-                                </div>
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-500 text-[10px] shrink-0 overflow-hidden">
+                                <AvatarDisplay
+                                  avatar={p.avatar}
+                                  ownerId={p.id}
+                                />
                               </div>
-                              <div className="flex items-center gap-1">
-                                {p.id === myPlayerId && onToggleWantToPlay && (
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-white font-black text-[10px] w-full flex items-center gap-1 min-w-0">
+                                  {status.hostId === p.id &&
+                                    !status.isAutoRoom && (
+                                      <Crown
+                                        size={10}
+                                        className="text-yellow-400 shrink-0"
+                                      />
+                                    )}
+                                  <ScrollingName name={p.name} maxLength={10} />
+                                </span>
+                                {p.wantToPlay && (
+                                  <span className="text-emerald-400 text-[8px] font-black">
+                                    想參加
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {p.id === myPlayerId && onToggleWantToPlay && (
+                                <button
+                                  onClick={onToggleWantToPlay}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
+                                    p.wantToPlay
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-slate-800 text-slate-400 border border-slate-700"
+                                  }`}
+                                >
+                                  {p.wantToPlay ? "取消排隊" : "加入排隊"}
+                                </button>
+                              )}
+                              {status.hostId === myPlayerId &&
+                                p.id !== myPlayerId && (
                                   <button
-                                    onClick={onToggleWantToPlay}
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
-                                      p.wantToPlay
-                                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                        : "bg-slate-800 text-slate-400 border border-slate-700"
-                                    }`}
+                                    onClick={() => onKickPlayer?.(p.id)}
+                                    className="opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-1 rounded-lg transition-all shadow-lg active:scale-95"
                                   >
-                                    {p.wantToPlay ? "取消排隊" : "加入排隊"}
+                                    <UserX size={12} />
                                   </button>
                                 )}
-                                {status.hostId === myPlayerId &&
-                                  p.id !== myPlayerId && (
-                                    <button
-                                      onClick={() => onKickPlayer?.(p.id)}
-                                      className="opacity-0 group-hover:opacity-100 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-1 rounded-lg transition-all shadow-lg active:scale-95"
-                                    >
-                                      <UserX size={12} />
-                                    </button>
-                                  )}
-                              </div>
-                            </motion.div>
-                          </div>
-                        ))}
-                    </AnimatePresence>
-                  </div>
-
-                  {!status.isStarted &&
-                    status.players.some((p) => p?.id === myPlayerId) &&
-                    onStandUp && (
-                      <div className="shrink-0 pt-3 border-t border-slate-800/50">
-                        <button
-                          onClick={onStandUp}
-                          className="w-full py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-slate-300 rounded-xl font-black transition-all text-[11px] flex items-center justify-center gap-2 border border-slate-700/50"
-                        >
-                          <ArrowDown size={14} /> 移至觀眾席
-                        </button>
-                      </div>
-                    )}
+                            </div>
+                          </motion.div>
+                        </div>
+                      ))}
+                  </AnimatePresence>
                 </div>
-              )}
+              </div>
+              {!status.isStarted &&
+                status.players.some((p) => p?.id === myPlayerId) &&
+                onStandUp && (
+                  <div className="shrink-0 pt-3 border-t border-slate-800/50 mt-auto">
+                    <button
+                      onClick={onStandUp}
+                      className="w-full py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-slate-300 rounded-xl font-black transition-all text-[11px] flex items-center justify-center gap-2 border border-slate-700/50"
+                    >
+                      <ArrowDown size={14} /> 移至觀眾席
+                    </button>
+                  </div>
+                )}
             </div>
           )}
         </div>
