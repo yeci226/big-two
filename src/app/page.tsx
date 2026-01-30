@@ -119,7 +119,7 @@ export default function Home() {
     localStorage.setItem("big-two-career-stats", JSON.stringify(careerStats));
   }, [careerStats]);
 
-  const [gameStatus, setGameStatus] = useState<GameStatus>({
+  const INITIAL_GAME_STATUS: GameStatus = {
     players: [undefined, undefined, undefined, undefined],
     spectators: [],
     hostId: null,
@@ -141,7 +141,11 @@ export default function Home() {
     isSeriesOver: false,
     seatMode: "free",
     lastUpdateTime: 0,
-  });
+  };
+
+  const [gameStatus, setGameStatus] = useState<GameStatus>(INITIAL_GAME_STATUS);
+
+  const prevRoomIdRef = useRef<string | null>(null);
 
   const [view, setView] = useState<"menu" | "game">("menu");
   const [isQuickJoining, setIsQuickJoining] = useState(false);
@@ -269,16 +273,23 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (!myPlayerId || isSinglePlayer || !roomId) return;
-
     const socket = getSocket();
 
     // ONLY join room if the view is "game"
     // This prevents players from appearing in the room just by visiting the URL
-    if (view === "game") {
+    if (view === "game" && myPlayerId && roomId) {
+      // Explicitly leave previous room if it changed
+      if (prevRoomIdRef.current && prevRoomIdRef.current !== roomId) {
+        console.log(
+          `🧹 Explicitly leaving previous room: ${prevRoomIdRef.current}`,
+        );
+        socket.emit("leave-room", prevRoomIdRef.current, myPlayerId);
+      }
+      prevRoomIdRef.current = roomId;
+
       // Join room
       const playerPayload: Player = {
-        id: myPlayerId,
+        id: myPlayerId!, // We checked this in the if above
         name: playerName,
         hand: [],
         isReady: false,
@@ -998,31 +1009,18 @@ export default function Home() {
       ];
 
       setGameStatus({
+        ...INITIAL_GAME_STATUS,
         players: mockPlayers,
-        spectators: [],
         hostId: id,
-        isStarted: false,
-        currentPlayerIndex: 0,
-        winnerId: null,
-        lastPlayedHand: null,
-        lastPlayerId: null,
-        passCount: 0,
-        turnStartTime: null,
-        allowSeatSelection: true,
         autoStartEnabled: false,
-        isPublic: true,
-        autoStartCountdown: null,
-        autoStartDuration: 5,
-        history: [],
-        gameMode: "normal",
-        targetRounds: 5,
-        currentRound: 1,
-      } as GameStatus);
+      });
       setView("game");
     } else {
-      setGameStatus((prev) => {
-        let newPlayers = [...prev.players];
-        let newSpectators = [...prev.spectators];
+      // Reset status back to initial for a fresh start in any MULTIPLAYER mode
+      // This ensures previous room state (rounds, history, scores) doesn't leak.
+      setGameStatus(() => {
+        let newPlayers = [...INITIAL_GAME_STATUS.players];
+        let newSpectators = [...INITIAL_GAME_STATUS.spectators];
 
         if (mode === "create") {
           newPlayers[0] = { ...me, role: "player" } as Player;
@@ -1039,17 +1037,11 @@ export default function Home() {
         }
 
         const updated = {
-          ...prev,
+          ...INITIAL_GAME_STATUS,
           players: newPlayers,
           spectators: newSpectators,
-          hostId: prev.hostId, // Don't set hostId locally, wait for server
-          isPublic:
-            mode === "create" ? (isPublicStart ?? false) : prev.isPublic,
-          gameMode: isAutoRoom ? "normal" : prev.gameMode || "normal",
-          targetRounds: isAutoRoom ? 5 : prev.targetRounds || 10,
-          currentRound: prev.currentRound || 1,
-          seatMode: isAutoRoom ? "free" : prev.seatMode || "free",
-          isAutoRoom: isAutoRoom ?? prev.isAutoRoom,
+          isPublic: mode === "create" ? (isPublicStart ?? false) : true,
+          isAutoRoom: !!isAutoRoom,
         };
         return updated;
       });
@@ -1426,7 +1418,7 @@ export default function Home() {
 
       const bot: Player = {
         id: `cpu-${Math.random().toString(36).substr(2, 5)}`,
-        name: `機器人`,
+        name: `機器人 ${targetIndex + 1}`,
         hand: [],
         isReady: true, // Bots are always ready
         winCount: 0,

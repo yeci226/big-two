@@ -177,14 +177,14 @@ export default function GameTable({
         initial={{ opacity: 0, y: 0 }}
         animate={{
           opacity: [0, 1, 1, 0],
-          y: -100,
+          y: -150,
         }}
         transition={{
-          duration: 2.5,
-          times: [0, 0.2, 0.8, 1],
+          duration: 2,
+          times: [0, 0.1, 0.7, 1],
           ease: "easeOut",
         }}
-        className={`absolute left-1/2 -translate-x-1/2 font-black text-2xl lg:text-4xl italic z-[100] ${diff > 0 ? "text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]" : "text-red-400 drop-shadow-[0_0_15px_rgba(248,113,113,0.6)]"}`}
+        className={`absolute left-1/2 -translate-x-1/2 font-black text-3xl lg:text-5xl italic z-[100] pointer-events-none ${diff > 0 ? "text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]" : "text-red-400 drop-shadow-[0_0_15px_rgba(248,113,113,0.6)]"}`}
       >
         {diff > 0 ? `+${diff}` : diff}
       </motion.div>
@@ -1144,18 +1144,15 @@ export default function GameTable({
               const player = status.players[seatIdx];
               const pos = getPositionIndex(seatIdx);
 
-              // Position 0 is the bottom seat (usually the user)
-              // If I am a player, POS 0 is MY absolute seat.
-              // If I am a spectator, POS 0 is absolute seat 0.
-              // We only hide pos 0 if we are a player because our hand is rendered separately at the bottom during active play.
-              // At game end (winnerId exists), we show the seat so revealed hand can be seen.
-              if (pos === 0 && !isSpectator && !status.winnerId) return null;
+              // Position 0 is the bottom seat (main player)
+              // We reveal the hand near the center at game end, but keep the info card at bottom-left.
+              const isMainPlayerSlot = pos === 0 && !isSpectator;
 
               const posClasses = [
                 "bottom-1 sm:bottom-2 lg:bottom-4 left-1/2 -translate-x-1/2", // Lowered for main player
-                "right-1 sm:right-2 lg:right-4 top-1/2 -translate-y-1/2 flex-col items-end", // Closer to right edge, align right
-                "top-1 sm:top-2 lg:top-4 left-1/2 -translate-x-1/2 flex-col items-center", // Top center
-                "left-1 sm:left-2 lg:left-4 top-1/2 -translate-y-1/2 flex-col items-start", // Closer to left edge, align left
+                "right-1 sm:right-2 lg:right-4 top-1/2 -translate-y-1/2", // Closer to right edge
+                "top-1 sm:top-2 lg:top-4 left-1/2 -translate-x-1/2", // Top center
+                "left-1 sm:left-2 lg:left-4 top-1/2 -translate-y-1/2", // Closer to left edge
               ][pos];
 
               if (!player) {
@@ -1313,25 +1310,85 @@ export default function GameTable({
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className={`flex -space-x-12 mb-2 scale-[0.4] lg:scale-[0.55] ${pos === 1 ? "origin-right" : pos === 3 ? "origin-left" : "origin-center"}`}
+                        className={`flex items-center gap-3 mb-2 scale-[0.4] lg:scale-[0.55] ${pos === 1 ? "origin-right flex-row-reverse" : pos === 3 ? "origin-left flex-row" : "origin-center flex-col"}`}
                       >
-                        {sortCards(player.hand).map((c, i) => (
-                          <motion.div
-                            key={c.id}
-                            initial={{
-                              x: pos === 1 ? -100 : pos === 3 ? 100 : 0,
-                              y: pos === 2 ? 100 : -100,
-                              scale: 0,
-                              opacity: 0,
-                            }}
-                            animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-                            transition={{ delay: i * 0.05 + 0.5 }}
-                            style={{ zIndex: i }}
-                            className="relative"
+                        {/* Info Card - Now to the left (or right for pos 1) of hand */}
+                        {!isMainPlayerSlot && (
+                          <div
+                            className={`group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[100px] lg:min-w-[120px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
                           >
-                            <Card card={c} disabled />
-                          </motion.div>
-                        ))}
+                            <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                              <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs overflow-hidden">
+                                {status.hostId === player.id &&
+                                  !status.isAutoRoom && (
+                                    <Crown
+                                      size={10}
+                                      className="text-yellow-400 shrink-0"
+                                    />
+                                  )}
+                                <div className="w-5 h-5 lg:w-6 lg:h-6 rounded-full overflow-hidden shrink-0 bg-slate-800 border border-white/10">
+                                  <AvatarDisplay
+                                    avatar={player.avatar}
+                                    ownerId={player.id}
+                                    className="text-[10px] lg:text-xs"
+                                  />
+                                </div>
+                                <ScrollingName
+                                  name={player.name}
+                                  maxLength={6}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
+                                🂠 {player.hand.length}
+                              </div>
+                              {status.gameMode === "score" ? (
+                                <div className="text-[9px] bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 flex items-center gap-1">
+                                  <span className="text-yellow-400 font-bold">
+                                    PTS
+                                  </span>{" "}
+                                  <span className="text-white font-black">
+                                    {player.score || 0}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                                  <span className="text-yellow-400 font-bold">
+                                    ★
+                                  </span>{" "}
+                                  {player.winCount || 0}
+                                </div>
+                              )}
+                            </div>
+                            <ScoreChange
+                              current={player.score || 0}
+                              prev={prevScores[player.id]}
+                              player={player}
+                            />
+                          </div>
+                        )}
+
+                        {/* Hand Display */}
+                        <div className="flex -space-x-12">
+                          {sortCards(player.hand).map((c, i) => (
+                            <motion.div
+                              key={c.id}
+                              initial={{
+                                x: pos === 1 ? -100 : pos === 3 ? 100 : 0,
+                                y: pos === 2 ? 100 : -100,
+                                scale: 0,
+                                opacity: 0,
+                              }}
+                              animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+                              transition={{ delay: i * 0.05 + 0.5 }}
+                              style={{ zIndex: i }}
+                              className="relative"
+                            >
+                              <Card card={c} disabled />
+                            </motion.div>
+                          ))}
+                        </div>
                       </motion.div>
                     ) : (
                       player.hand.length > 0 &&
@@ -1348,80 +1405,86 @@ export default function GameTable({
                       )
                     )}
                   </AnimatePresence>
-                  <div
-                    className={`group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[80px] lg:min-w-[100px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                      <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs max-w-[60px] lg:max-w-[80px] overflow-hidden">
-                        {status.hostId === player.id && !status.isAutoRoom && (
-                          <Crown
-                            size={10}
-                            className="text-yellow-400 shrink-0"
-                          />
-                        )}
-                        <div className="w-5 h-5 lg:w-6 lg:h-6 rounded-full overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center border border-white/10">
-                          <AvatarDisplay
-                            avatar={player.avatar}
-                            ownerId={player.id}
-                            className="text-[10px] lg:text-xs"
-                          />
+                  {/* Persistent Info Card (Only for non-GameOver revealed slots, EXCEPT POS 0 which uses bottom-left card) */}
+                  {!revealAll && !isMainPlayerSlot && (
+                    <div
+                      className={`group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[80px] lg:min-w-[100px] ${isTurn ? "bg-blue-600/20 border-blue-400 scale-105 shadow-lg shadow-blue-500/30 z-20" : "bg-slate-900 border-slate-800 text-white backdrop-blur-md"}`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                        <div className="flex items-center gap-1 font-black text-[10px] lg:text-xs max-w-[60px] lg:max-w-[80px] overflow-hidden">
+                          {status.hostId === player.id &&
+                            !status.isAutoRoom && (
+                              <Crown
+                                size={10}
+                                className="text-yellow-400 shrink-0"
+                              />
+                            )}
+                          <div className="w-5 h-5 lg:w-6 lg:h-6 rounded-full overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center border border-white/10">
+                            <AvatarDisplay
+                              avatar={player.avatar}
+                              ownerId={player.id}
+                              className="text-[10px] lg:text-xs"
+                            />
+                          </div>
+                          <ScrollingName name={player.name} maxLength={6} />
                         </div>
-                        <ScrollingName name={player.name} maxLength={6} />
+                        {status.hostId === myPlayerId &&
+                          player.id !== myPlayerId &&
+                          !status.isStarted &&
+                          !status.isAutoRoom && (
+                            <button
+                              onClick={() => onKickPlayer?.(player.id)}
+                              className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition-all"
+                            >
+                              <UserX size={10} />
+                            </button>
+                          )}
                       </div>
-                      {status.hostId === myPlayerId &&
-                        player.id !== myPlayerId &&
-                        !status.isStarted &&
-                        !status.isAutoRoom && (
-                          <button
-                            onClick={() => onKickPlayer?.(player.id)}
-                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition-all"
-                          >
-                            <UserX size={10} />
-                          </button>
-                        )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
-                        🂠 {player.hand.length}
-                      </div>
-                      {status.gameMode === "score" ? (
-                        <div className="text-[9px] bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 flex items-center gap-1">
-                          <span className="text-yellow-400 font-bold">PTS</span>{" "}
-                          <span className="text-white font-black">
-                            {player.score || 0}
-                          </span>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black opacity-60 flex items-center gap-1">
+                          🂠 {player.hand.length}
                         </div>
-                      ) : (
-                        <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-                          <span className="text-yellow-400 font-bold">★</span>{" "}
-                          {player.winCount || 0}
-                          <span className="text-white/20 mx-0.5">/</span>
-                          <span className="text-white/40">
-                            {player.gameCount || 0}
-                          </span>
+                        {status.gameMode === "score" ? (
+                          <div className="text-[9px] bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20 flex items-center gap-1">
+                            <span className="text-yellow-400 font-bold">
+                              PTS
+                            </span>{" "}
+                            <span className="text-white font-black">
+                              {player.score || 0}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                            <span className="text-yellow-400 font-bold">★</span>{" "}
+                            {player.winCount || 0}
+                            <span className="text-white/20 mx-0.5">/</span>
+                            <span className="text-white/40">
+                              {player.gameCount || 0}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {!status.isStarted && (
+                        <div
+                          className={`text-[8px] font-black tracking-widest mt-1 text-center ${player.isReady ? "text-emerald-400" : "text-slate-500"}`}
+                        >
+                          ● {player.isReady ? "已準備" : "未準備"}
                         </div>
                       )}
+                      <ScoreChange
+                        current={player.score || 0}
+                        prev={prevScores[player.id]}
+                        player={player}
+                      />
                     </div>
-                    {!status.isStarted && (
-                      <div
-                        className={`text-[8px] font-black tracking-widest mt-1 text-center ${player.isReady ? "text-emerald-400" : "text-slate-500"}`}
-                      >
-                        ● {player.isReady ? "已準備" : "未準備"}
-                      </div>
-                    )}
-                    <ScoreChange
-                      current={player.score || 0}
-                      prev={prevScores[player.id]}
-                      player={player}
-                    />
-                  </div>{" "}
+                  )}{" "}
                 </div>
               );
             })}
           </div>
 
           {/* My Hand Section - centered at the bottom of the main area */}
-          <div className="shrink-0 relative flex flex-col items-center justify-end h-36 sm:h-48 lg:h-60 pb-0">
+          <div className="w-full shrink-0 relative flex flex-col items-center justify-end h-36 sm:h-48 lg:h-60 pb-0">
             <AnimatePresence mode="wait">
               {isLoggedIn &&
               !isSpectator &&
@@ -1572,38 +1635,84 @@ export default function GameTable({
                         ) : null}
                       </>
                     ) : (
-                      // Game Over / Lobby Controls
-                      <div className="flex items-center justify-center gap-4 py-2">
-                        {status.hostId === myPlayerId && (
-                          <div className="flex flex-col gap-2">
-                            <button
-                              onClick={onStart}
-                              disabled={
-                                getActualPlayerCount(status.players) < 4
-                              }
-                              className={`px-8 py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
-                            >
-                              <Play size={18} /> 開始遊戲
-                            </button>
-                            {!isSinglePlayer && (
-                              <div className="flex gap-2">
-                                {((status.seatMode || "free") === "manual" ||
-                                  (status.seatMode || "free") === "free") && (
-                                  <button
-                                    onClick={onRandomize}
-                                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
-                                  >
-                                    <Shuffle size={12} /> 隨機座位
-                                  </button>
-                                )}
-                              </div>
+                      <div className="w-full flex flex-col items-center justify-center gap-4 py-4 z-50">
+                        {/* Game Over / Lobby Controls - Vertical Stack */}
+                        {(status.autoStartCountdown === null ||
+                          status.autoStartCountdown === undefined) && (
+                          <>
+                            {status.hostId === myPlayerId && (
+                              <button
+                                onClick={onStart}
+                                disabled={
+                                  getActualPlayerCount(status.players) < 4
+                                }
+                                className={`w-full max-w-[200px] py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                              >
+                                <Play size={18} /> 開始遊戲
+                              </button>
                             )}
-                          </div>
+
+                            {!isSinglePlayer && me.role === "player" && (
+                              <button
+                                onClick={onReady}
+                                className={`w-full max-w-[200px] py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 group relative`}
+                              >
+                                {me.isReady ? (
+                                  <>
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />{" "}
+                                    已準備
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap size={18} fill="currentColor" />{" "}
+                                    準備好了
+                                  </>
+                                )}
+                              </button>
+                            )}
+
+                            {status.hostId === myPlayerId &&
+                              !isSinglePlayer &&
+                              ((status.seatMode || "free") === "manual" ||
+                                (status.seatMode || "free") === "free") && (
+                                <button
+                                  onClick={onRandomize}
+                                  className="w-full max-w-[200px] py-2 bg-slate-800/50 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
+                                >
+                                  <Shuffle size={12} /> 隨機座位
+                                </button>
+                              )}
+                          </>
                         )}
-                        {!isSinglePlayer && me.role === "player" && (
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : isLoggedIn &&
+                !isSpectator &&
+                !status.isStarted &&
+                !status.isCooldown ? (
+                <div className="w-full h-auto flex flex-col items-center justify-center gap-4 px-4 z-50 py-4">
+                  {/* Lobby Controls in hand area (Initial state) - Vertical Stack */}
+                  {(status.autoStartCountdown === null ||
+                    status.autoStartCountdown === undefined) && (
+                    <>
+                      {status.hostId === myPlayerId && (
+                        <button
+                          onClick={onStart}
+                          disabled={getActualPlayerCount(status.players) < 4}
+                          className={`w-full max-w-[200px] py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
+                        >
+                          <Play size={18} /> 開始遊戲
+                        </button>
+                      )}
+
+                      {!isSinglePlayer &&
+                        me.role === "player" &&
+                        !status.isCooldown && (
                           <button
                             onClick={onReady}
-                            className={`px-8 py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center gap-2 group relative`}
+                            className={`w-full max-w-[200px] py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 group relative`}
                           >
                             {me.isReady ? (
                               <>
@@ -1617,71 +1726,27 @@ export default function GameTable({
                             )}
                           </button>
                         )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : isLoggedIn &&
-                !isSpectator &&
-                !status.isStarted &&
-                !status.isCooldown ? (
-                <div className="h-44 mb-2 flex items-center justify-center gap-4">
-                  {/* Lobby Controls in hand area (Initial state) */}
-                  {status.hostId === myPlayerId && (
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={onStart}
-                        disabled={getActualPlayerCount(status.players) < 4}
-                        className={`px-8 py-3 rounded-2xl font-black text-emerald-950 transition-all flex items-center justify-center gap-2 ${getActualPlayerCount(status.players) === 4 ? "bg-emerald-400 hover:bg-emerald-300 shadow-xl shadow-emerald-400/20 scale-105" : "bg-slate-800 text-slate-600 cursor-not-allowed"}`}
-                      >
-                        <Play size={18} /> 開始遊戲
-                      </button>
 
-                      {!isSinglePlayer && (
-                        <div className="flex gap-2">
-                          {((status.seatMode || "free") === "manual" ||
-                            (status.seatMode || "free") === "free") && (
-                            <button
-                              onClick={onRandomize}
-                              className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
-                            >
-                              <Shuffle size={12} /> 隨機座位
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {!isSinglePlayer &&
-                    me.role === "player" &&
-                    !status.isCooldown && (
-                      <button
-                        onClick={onReady}
-                        className={`px-8 py-3 ${me.isReady ? "bg-slate-800 hover:bg-slate-700 border-2 border-emerald-500/30 text-emerald-400" : "bg-yellow-400 hover:bg-yellow-300 text-emerald-950"} font-black rounded-2xl shadow-xl transition-all active:scale-95 flex items-center gap-2 group relative`}
-                      >
-                        {me.isReady ? (
-                          <>
-                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />{" "}
-                            已準備
-                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-950 text-white text-xs px-3 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                              取消準備
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <Zap size={18} fill="currentColor" /> 準備好了
-                          </>
+                      {status.hostId === myPlayerId &&
+                        !isSinglePlayer &&
+                        ((status.seatMode || "free") === "manual" ||
+                          (status.seatMode || "free") === "free") && (
+                          <button
+                            onClick={onRandomize}
+                            className="w-full max-w-[200px] py-2 bg-slate-800/50 hover:bg-slate-700 text-white rounded-xl font-black transition-all text-[10px] flex items-center justify-center gap-1.5 border border-slate-700"
+                          >
+                            <Shuffle size={12} /> 隨機座位
+                          </button>
                         )}
-                      </button>
-                    )}
+                    </>
+                  )}
                 </div>
               ) : null}
             </AnimatePresence>
           </div>
         </div>
-        {/* My Info Tag Relocated inside the board area - bottom left corner of emerald zone */}
-        {isLoggedIn && !isSpectator && !status.winnerId && (
+
+        {isLoggedIn && !isSpectator && (
           <div className="absolute left-[8%] bottom-[6%] z-50 pointer-events-none">
             <div className="group relative p-1.5 lg:p-2 rounded-lg lg:rounded-xl border-2 transition-all min-w-[100px] lg:min-w-[120px] bg-slate-900 border-blue-500/30 text-white backdrop-blur-md shadow-2xl pointer-events-auto">
               {me.isBot && (
@@ -1745,7 +1810,6 @@ export default function GameTable({
             </div>
           </div>
         )}
-
         {/* Right Sidebar */}
         <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 min-h-0">
           {/* History Panel - Top half or separate */}
