@@ -488,8 +488,8 @@ export default function GameTable({
               {/* Left Side - Room Info */}
               <div className="flex items-center gap-3 overflow-hidden whitespace-nowrap">
                 <div className="flex flex-col gap-0.5 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 h-5">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5 leading-none">
                       {isSinglePlayer ? (
                         <span className="bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20">
                           SINGLE
@@ -499,7 +499,7 @@ export default function GameTable({
                           ROOM
                           {status.gameMode === "score" && (
                             <span
-                              className={`${(status.currentRound || 1) > (status.targetRounds || 5) / 2 ? "bg-red-500/10 text-red-300 border-red-500/20" : "bg-purple-500/10 text-purple-300 border-purple-500/20"} text-[9px] px-1.5 py-0.5 rounded border tracking-normal ml-1 flex items-center gap-1`}
+                              className={`${(status.currentRound || 1) > (status.targetRounds || 5) / 2 ? "bg-red-500/10 text-red-300 border-red-500/20" : "bg-purple-500/10 text-purple-300 border-purple-500/20"} text-[9px] px-1.5 py-0.5 rounded border tracking-normal ml-1 flex items-center gap-1 leading-none h-4`}
                             >
                               R{status.currentRound}/{status.targetRounds}
                             </span>
@@ -549,28 +549,28 @@ export default function GameTable({
                 </div>
 
                 {/* Desktop Settings View */}
-                <div className="hidden lg:flex items-center gap-4">
-                  <div className="w-px h-6 bg-slate-800/50" />
+                <div className="hidden lg:flex items-center gap-2.5">
+                  <div className="w-px h-6 bg-slate-800/30" />
 
                   {/* Public Toggle */}
                   {!isSinglePlayer &&
                     (status.isAutoRoom ? (
-                      <div className="h-8 px-3 rounded-lg text-xs font-black flex items-center bg-blue-500/10 text-blue-400/70 border border-blue-500/20 whitespace-nowrap shrink-0">
+                      <div className="h-8 px-2.5 rounded-lg text-[10px] font-black flex items-center bg-blue-500/10 text-blue-400/70 border border-blue-500/20 whitespace-nowrap shrink-0">
                         公開房間
                       </div>
                     ) : status.hostId === myPlayerId ? (
                       <button
                         onClick={onTogglePublic}
                         disabled={status.isStarted}
-                        className={`h-8 px-3 rounded-lg text-xs font-black transition-all ${status.isPublic ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                        className={`h-8 px-2.5 rounded-lg text-[10px] font-black transition-all ${status.isPublic ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
                       >
                         {status.isPublic ? "公開" : "私人"}
                       </button>
                     ) : (
                       <div
-                        className={`h-8 px-3 rounded-lg text-xs font-black flex items-center border whitespace-nowrap shrink-0 ${status.isPublic ? "bg-blue-500/10 text-blue-400/70 border-blue-500/20" : "bg-slate-800/50 text-slate-500 border-slate-700/50"}`}
+                        className={`h-8 px-2.5 rounded-lg text-[10px] font-black flex items-center border whitespace-nowrap shrink-0 ${status.isPublic ? "bg-blue-500/10 text-blue-400/70 border-blue-500/20" : "bg-slate-800/50 text-slate-500 border-slate-700/50"}`}
                       >
-                        {status.isPublic ? "公開房間" : "私人房間"}
+                        {status.isPublic ? "公開" : "私人"}
                       </div>
                     ))}
 
@@ -578,7 +578,7 @@ export default function GameTable({
                   {status.hostId === myPlayerId &&
                   !status.isStarted &&
                   (status.currentRound || 1) === 1 ? (
-                    <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5">
+                    <div className="flex items-center bg-slate-900/80 rounded-xl p-0.5 border border-white/5 h-8">
                       <button
                         onClick={() =>
                           onUpdateGameSettings(
@@ -586,7 +586,7 @@ export default function GameTable({
                             status.targetRounds || 5,
                           )
                         }
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${status.gameMode === "normal" ? "bg-blue-600 text-white" : "text-slate-500"}`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all h-7 ${status.gameMode === "normal" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500"}`}
                       >
                         一般
                       </button>
@@ -597,23 +597,23 @@ export default function GameTable({
                             status.targetRounds || 5,
                           )
                         }
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${status.gameMode === "score" ? "bg-purple-600 text-white" : "text-slate-500"}`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all h-7 ${status.gameMode === "score" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500"}`}
                       >
                         積分
                       </button>
                     </div>
                   ) : (
                     <div
-                      className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase flex items-center gap-1.5 ${status.gameMode === "score" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-blue-500/10 border-blue-500/30 text-blue-400"}`}
+                      className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase flex items-center gap-1 h-8 ${status.gameMode === "score" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-blue-500/10 border-blue-500/30 text-blue-400"}`}
                     >
                       {status.gameMode === "score" ? "積分模式" : "一般模式"}
                     </div>
                   )}
 
                   {/* Rounds Selection (Score Mode Only) */}
-                  {status.gameMode === "score" && (
-                    <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5 gap-1">
-                      <div className="flex items-center bg-slate-800/50 rounded-lg p-0.5 whitespace-nowrap">
+                  {status.gameMode === "score" ? (
+                    <div className="flex items-center bg-slate-900/80 rounded-xl p-0.5 border border-white/5 gap-0.5 h-8">
+                      <div className="flex items-center bg-slate-800/30 rounded-lg p-0.5 whitespace-nowrap gap-0.5 h-7">
                         {[2, 5, 7, 10].map((r) => (
                           <button
                             key={r}
@@ -629,7 +629,7 @@ export default function GameTable({
                             disabled={
                               status.hostId !== myPlayerId || status.isStarted
                             }
-                            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all whitespace-nowrap ${
+                            className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all whitespace-nowrap h-6 ${
                               (status.targetRounds || 5) === r
                                 ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20"
                                 : "text-slate-500 hover:text-slate-300"
@@ -653,7 +653,7 @@ export default function GameTable({
                               !status.isDoubleStakeEnabled,
                             )
                           }
-                          className={`px-1 py-1 rounded-lg text-xs font-black transition-all border ${
+                          className={`px-1 py-1 rounded-lg text-xs font-black transition-all border h-7 w-7 flex items-center justify-center ${
                             status.isDoubleStakeEnabled
                               ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
                               : "bg-slate-800 text-slate-500 border-transparent hover:text-slate-400"
@@ -663,43 +663,45 @@ export default function GameTable({
                         </button>
                       ) : (
                         status.isDoubleStakeEnabled && (
-                          <div className="px-1 py-1 rounded-lg text-xs font-black bg-orange-500/10 text-orange-400 border border-orange-500/20 whitespace-nowrap">
+                          <div className="px-1 py-1 rounded-lg text-xs font-black bg-orange-500/10 text-orange-400 border border-orange-500/20 whitespace-nowrap h-7 w-7 flex items-center justify-center">
                             <Zap size={16} />
                           </div>
                         )
                       )}
                     </div>
+                  ) : (
+                    <></>
                   )}
 
                   {/* Seat Mode Selection */}
                   {!isSinglePlayer && (
                     <>
-                      <div className="flex items-center bg-slate-900/80 rounded-xl p-1 border border-white/5">
+                      <div className="flex items-center bg-slate-900/80 rounded-xl p-0.5 border border-white/5 h-8">
                         {status.hostId === myPlayerId &&
                         !status.isStarted &&
                         onUpdateSeatMode ? (
                           <>
                             <button
                               onClick={() => onUpdateSeatMode("free")}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all h-7 ${(status.seatMode || "free") === "free" ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" : "text-slate-500 hover:text-slate-300"}`}
                             >
-                              自由
+                              自由選位
                             </button>
                             <button
                               onClick={() => onUpdateSeatMode("manual")}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white shadow-lg shadow-amber-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all h-7 ${(status.seatMode || "free") === "manual" ? "bg-amber-600 text-white shadow-lg shadow-amber-500/20" : "text-slate-500 hover:text-slate-300"}`}
                             >
-                              手動
+                              房主手動
                             </button>
                             <button
                               onClick={() => onUpdateSeatMode("elimination")}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white shadow-lg shadow-red-500/20" : "text-slate-500 hover:text-slate-300"}`}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all h-7 ${(status.seatMode || "free") === "elimination" ? "bg-red-600 text-white shadow-lg shadow-red-500/20" : "text-slate-500 hover:text-slate-300"}`}
                             >
-                              淘汰
+                              淘汰制
                             </button>
                           </>
                         ) : (
-                          <div className="px-3 py-1.5 text-xs font-black text-slate-400">
+                          <div className="px-2 py-1 text-[10px] font-black text-slate-400 h-7 flex items-center">
                             {(status.seatMode || "free") === "free"
                               ? "自由選位"
                               : (status.seatMode || "free") === "manual"
